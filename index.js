@@ -188,6 +188,7 @@ module.exports = function (home) {
     var ready = function (root) {
       fuse.mount(mnt, {
         force: true,
+        options: ['suid', 'dev'],
         getattr: function (name, cb) {
           if (name === '/') return cb(0, root)
 
@@ -204,7 +205,6 @@ module.exports = function (home) {
                 dev: file.dev || st.dev,
                 nlink: file.nlink || st.nlink,
                 rdev: file.rdev || st.rdev,
-                dev: file.dev || st.dev,
                 blksize: file.blksize || st.blksize,
                 blocks: file.blocks || st.blocks,
                 ino: file.ino || st.ino,
