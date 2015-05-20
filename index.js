@@ -304,9 +304,9 @@ module.exports = function (home) {
       }
 
       ops.rename = function (name, dest, cb) {
-        link(name, dest, function (errno) {
+        ops.link(name, dest, function (errno) {
           if (errno) return cb(errno)
-          unlink(name, cb)
+          ops.unlink(name, cb)
         })
       }
 
@@ -417,7 +417,7 @@ module.exports = function (home) {
       }
 
       ops.symlink = function (name, dest, cb) {
-        create(dest, 41453, function (errno, fd) {
+        ops.create(dest, 41453, function (errno, fd) {
           if (errno) return cb(errno)
 
           var buf = new Buffer(name)
