@@ -161,6 +161,7 @@ module.exports = function (home) {
 
     var cow = function (name, cb) { // TODO: batch for me for speed/consistency
       get(name, function (err, file, layer) {
+        if (err && name === '/') return cb(null, {mode: root.mode})
         if (err) return cb(err)
         if (layer === mount.id) return cb(null, file)
 
