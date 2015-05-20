@@ -116,7 +116,7 @@ module.exports = function (home) {
 
             var newFile = {
               mode: file ? file.mode : 33188,
-              dev: file && file.dev,
+              rdev: file && file.rdev,
               uid: file && file.uid,
               gid: file && file.gid,
               blob: newBlob
@@ -131,7 +131,7 @@ module.exports = function (home) {
           mkdirp(path.join(newBlob, '..'), function (err) {
             if (err) return cb(err)
             if (!file) return done()
-            if (file.dev) return mknod(newBlob, file.mode, file.dev, done) // special file
+            if (file.rdev) return mknod(newBlob, file.mode, file.rdev, done) // special file
             pump(fs.createReadStream(file.blob), fs.createWriteStream(newBlob), done)
           })
         }
@@ -278,10 +278,11 @@ module.exports = function (home) {
           })
         },
         mknod: function (name, mode, dev, cb) {
+          console.log('calling mknod', name)
           var blob = path.join(mount.writes, name)
           mknod(blob, mode, dev, function (err) {
             if (err) return cb(fuse.errno(err.code))
-            that.add(mount.id, name, {mode: mode, dev: dev, blob: blob}, function (err) {
+            that.add(mount.id, name, {mode: mode, rdev: dev, blob: blob}, function (err) {
               if (err) return cb(fuse.errno(err.code))
               cb(0)
             })
@@ -291,7 +292,7 @@ module.exports = function (home) {
           var readonly = function () {
             get(name, function (err, file) {
               if (err) return cb(fuse.errno(err.code))
-              if (file.dev) return writeMaybe() // special file - always cow
+              if (file.rdev) return writeMaybe() // special file - always cow
 
               fs.open(file.blob, 'r', function (err, fd) {
                 if (err) return cb(fuse.errno(err.code))
@@ -354,7 +355,7 @@ module.exports = function (home) {
           })
         },
         mkdir: function (name, mode, cb) {
-          that.add(mount.id, name, {mode: mode}, function (err) {
+          that.add(mount.id, name, {mode: mode | 040000}, function (err) {
             if (err) return cb(fuse.errno(err.code))
             cb(0)
           })
