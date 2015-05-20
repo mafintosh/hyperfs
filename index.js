@@ -215,7 +215,12 @@ module.exports = function (home) {
     }
 
     var ready = function (root) {
-      var link = function (name, dest, cb) {
+      var ops = {}
+
+      ops.force = true
+      ops.options = ['suid', 'dev']
+
+      ops.link = function (name, dest, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           cauf.put(mount.id, dest, file, function (err) {
@@ -229,7 +234,7 @@ module.exports = function (home) {
         })
       }
 
-      var getattr = function (name, cb) {
+      ops.getattr = function (name, cb) {
         if (name === '/') return cb(0, root)
 
         get(name, function (err, file, layer) {
@@ -265,7 +270,7 @@ module.exports = function (home) {
         })
       }
 
-      var readdir = function (name, cb) {
+      ops.readdir = function (name, cb) {
         if (!/\/$/.test(name)) name += '/'
 
         var key = toIndexKey(name)
@@ -288,7 +293,7 @@ module.exports = function (home) {
         })
       }
 
-      var truncate = function (name, size, cb) {
+      ops.truncate = function (name, size, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           getInode(mount.id, file.ino, function (err, data) {
@@ -298,14 +303,14 @@ module.exports = function (home) {
         })
       }
 
-      var rename = function (name, dest, cb) {
+      ops.rename = function (name, dest, cb) {
         link(name, dest, function (errno) {
           if (errno) return cb(errno)
           unlink(name, cb)
         })
       }
 
-      var mknod = function (name, mode, dev, cb) {
+      ops.mknod = function (name, mode, dev, cb) {
         console.log('mknod', name, mode, dev)
         var inode = ++mount.inodes
         var filename = writeablePath()
@@ -316,13 +321,13 @@ module.exports = function (home) {
             if (err) return cb(fuse.errno(err.code))
             mknod(filename, mode, dev, function (err) {
               if (err) return cb(fuse.errno(err.code))
-              cauf.put(name, {special: true, rdev: dev, mode: mode, ino: inode}, wrap(cb))
+              cauf.put(mount.id, name, {special: true, rdev: dev, mode: mode, ino: inode}, wrap(cb))
             })
           })
         })
       }
 
-      var open = function (name, flags, cb) {
+      ops.open = function (name, flags, cb) {
         var open = function (layer, ino) {
           getInode(layer, ino, function (err, data) {
             if (err) return cb(fuse.errno(err.code))
@@ -352,7 +357,7 @@ module.exports = function (home) {
         else writeMaybe() // cow
       }
 
-      var create = function (name, mode, cb) {
+      ops.create = function (name, mode, cb) {
         var inode = ++mount.inodes
         var filename = writeablePath()
 
@@ -371,14 +376,14 @@ module.exports = function (home) {
         })
       }
 
-      var unlink = function (name, cb) {
+      ops.unlink = function (name, cb) {
         cow(name, function (err, file) { // TODO: don't copy file if refs === 1 and deleting
           if (err) return cb(fuse.errno(err.code))
           del(name, file.ino, wrap(cb))
         })
       }
 
-      var mkdir = function (name, mode, cb) {
+      ops.mkdir = function (name, mode, cb) {
         var inode = ++mount.inodes
         putInode(mount.id, inode, {refs: [name]}, function (err) {
           if (err) return cb(fuse.errno(err.code))
@@ -386,32 +391,32 @@ module.exports = function (home) {
         })
       }
 
-      var rmdir = function (name, cb) {
+      ops.rmdir = function (name, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           del(name, file.ino, wrap(cb))
         })
       }
 
-      var write = function (name, fd, buf, len, offset, cb) {
+      ops.write = function (name, fd, buf, len, offset, cb) {
         fs.write(fd, buf, 0, len, offset, function (err, bytes) {
           if (err) return cb(fuse.errno(err.code))
           cb(bytes)
         })
       }
 
-      var read = function (name, fd, buf, len, offset, cb) {
+      ops.read = function (name, fd, buf, len, offset, cb) {
         fs.read(fd, buf, 0, len, offset, function (err, bytes) {
           if (err) return cb(fuse.errno(err.code))
           cb(bytes)
         })
       }
 
-      var release = function (name, fd, cb) {
+      ops.release = function (name, fd, cb) {
         fs.close(fd, wrap(cb))
       }
 
-      var symlink = function (name, dest, cb) {
+      ops.symlink = function (name, dest, cb) {
         create(dest, 41453, function (errno, fd) {
           if (errno) return cb(errno)
 
@@ -431,7 +436,7 @@ module.exports = function (home) {
         })
       }
 
-      var readlink = function (name, cb) {
+      ops.readlink = function (name, cb) {
         get(name, function (err, file, layer) {
           if (err) return cb(fuse.errno(err.code))
           getInode(layer, file.ino, function (err, data) {
@@ -444,7 +449,7 @@ module.exports = function (home) {
         })
       }
 
-      var chmod = function (name, mode, cb) {
+      ops.chmod = function (name, mode, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           file.mode = mode
@@ -452,7 +457,7 @@ module.exports = function (home) {
         })
       }
 
-      var chown = function (name, uid, gid, cb) {
+      ops.chown = function (name, uid, gid, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           file.uid = uid
@@ -461,7 +466,7 @@ module.exports = function (home) {
         })
       }
 
-      var utimens = function (name, ctime, mtime, cb) {
+      ops.utimens = function (name, ctime, mtime, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           file.ctime = ctime.getTime()
@@ -470,29 +475,7 @@ module.exports = function (home) {
         })
       }
 
-      fuse.mount(mnt, {
-        force: true,
-        options: ['suid', 'dev'],
-        getattr: getattr,
-        readdir: readdir,
-        truncate: truncate,
-        rename: rename,
-        mknod: mknod,
-        open: open,
-        create: create,
-        unlink: unlink,
-        mkdir: mkdir,
-        rmdir: rmdir,
-        link: link,
-        symlink: symlink,
-        readlink: readlink,
-        write: write,
-        read: read,
-        release: release,
-        chown: chown,
-        chmod: chmod,
-        utimens: utimens
-      }, function (err) {
+      fuse.mount(mnt, ops, function (err) {
         if (err) return mount.emit('error', err)
         mount.emit('ready')
       })
