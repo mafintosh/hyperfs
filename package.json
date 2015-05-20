@@ -3,18 +3,25 @@
   "version": "0.0.0",
   "description": "A content-addressable union file system build on top of fuse, leveldb and node",
   "main": "index.js",
+  "bin": {
+    "cauf": "bin.js"
+  },
   "dependencies": {
     "cuid": "^1.2.5",
+    "from2": "^1.3.0",
     "fuse-bindings": "^2.4.2",
     "level": "^1.0.0",
     "level-enumerate": "^1.0.1",
+    "level-temp": "^2.1.0",
     "lexicographic-integer": "^1.1.0",
+    "minimist": "^1.1.1",
     "mkdirp": "^0.5.1",
     "mknod": "^1.0.3",
     "pump": "^1.0.0",
     "pumpify": "^1.3.3",
     "sorted-union-stream": "^2.1.1",
-    "subleveldown": "^2.0.0"
+    "subleveldown": "^2.0.0",
+    "through2": "^0.6.5"
   },
   "devDependencies": {},
   "repository": {
