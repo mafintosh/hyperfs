@@ -254,6 +254,23 @@ module.exports = function (home) {
           console.error('hardlinks not implemented yet')
           cb(fuse.EPERM)
         },
+        rename: function (from, to, cb) {
+          cow(from, function (err, file) {
+            if (err) return cb(fuse.errno(err.code))
+            var newBlob = path.join(mount.writes, to)
+            fs.rename(file.blob, newBlob, function (err) {
+              if (err) return cb(fuse.errno(err.code))
+              file.blob = newBlob
+              that.del(mount.id, from, function (err) {
+                if (err) return cb(fuse.errno(err.code))
+                that.add(mount.id, to, file, function (err) {
+                  if (err) return cb(fuse.errno(err.code))
+                  cb(0)
+                })
+              })
+            })
+          })
+        },
         readdir: function (name, cb) {
           if (!/\/$/.test(name)) name += '/'
           var key = toIndexKey(name)
