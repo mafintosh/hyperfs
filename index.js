@@ -484,7 +484,7 @@ module.exports = function (home) {
         })
       }
 
-      ops.getattr = function (name, cb) {
+      ops.fgetattr = function (name, fd, cb) {
         if (name === '/') return cb(0, root)
 
         get(name, function (err, file, layer) {
@@ -512,12 +512,19 @@ module.exports = function (home) {
 
           if (file.mode & 040000) return onstat(null, root)
           getInode(layer, file.ino, function (err, inode) {
+            if (err && fd > -1) return fs.fstat(fd, onstat)
             if (err) throw new Error('NO INODE FOR ' + name)
             if (err) return cb(fuse.errno(err.code))
+
             nlink = inode.refs.length
-            fs.lstat(path.join(home, inode.data), onstat)
+            if (fd < 0) fs.lstat(path.join(home, inode.data), onstat)
+            else fs.fstat(fd, onstat)
           })
         })
+      }
+
+      ops.getattr = function (name, cb) {
+        ops.getfattr(name, -1, cb)
       }
 
       ops.readdir = function (name, cb) {
@@ -551,6 +558,14 @@ module.exports = function (home) {
             fs.truncate(path.join(home, data.data), size, wrap(cb))
           })
         })
+      }
+
+      ops.ftruncate = function (name, fd, size, cb) {
+        fs.ftruncate(fd, size, wrap(cb))
+      }
+
+      ops.fsync = function (name, fd, datasync, cb) {
+        fs.fsync(fd, wrap(cb))
       }
 
       ops.rename = function (name, dest, cb) {
