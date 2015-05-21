@@ -375,11 +375,15 @@ module.exports = function (home) {
   cauf.replicate = function (opts) {
     if (!opts) opts = {}
 
+    var drains = []
+    var blobs = 0
+
     var plex = multiplex(function (stream, id) {
       var parts = id.split('/')
 
       if (parts[0] === 's') {
         var encode = function (data, enc, cb) {
+          if (blobs) return drains.push(encode.bind(null, data, enc, cb))
           cb(null, JSON.stringify(data))
         }
 
@@ -393,7 +397,15 @@ module.exports = function (home) {
 
       if (parts[0] === 'd') {
         plex.emit('send-data', parts[1])
-        pump(cauf.createBlobReadStream(parts[1]), stream)
+        blobs++
+        graph.cork()
+        pump(cauf.createBlobReadStream(parts[1]), stream, function () {
+          blobs--
+          if (!blobs) {
+            while (drains.length) drains.shift()()
+          }
+          graph.uncork()
+        })
         return
       }
     })
@@ -401,7 +413,7 @@ module.exports = function (home) {
     var logOutgoing = plex.createStream('hyperlog')
     var logIncoming = plex.receiveStream('hyperlog')
 
-    var onnode = function (node, cb) {
+    var onnode = function (node, enc, cb) {
       var value = JSON.parse(node.value.toString())
       var s = plex.createStream('s/' + value.snapshot)
       var hash = crypto.createHash('sha256')
@@ -410,24 +422,21 @@ module.exports = function (home) {
 
       plex.emit('receive-snapshot', value.snapshot)
 
-      var write = function (val, enc, cb) {
+      var write = function (val, cb) {
         var raw = val.toString()
         val = JSON.parse(raw)
-
-        var snapshot = function () {
-          hash.update(raw)
-          snapshots.put(space + '!' + lexint.pack(i++, 'hex'), val, cb)
-        }
 
         var done = function () {
           var meta = {special: val.special, deleted: val.deleted, mode: val.mode, uid: val.uid, gid: val.gid, ino: val.ino, rdev: val.rdev}
           cauf.put(value.snapshot, val.name, meta, function (err) {
+            if (err) return cb(err)
+            if (!val.ino) return cb(null, {raw: raw, value: val})
             getInode(value.snapshot, val.ino, function (_, inode) {
               inode = inode || {refs: [], data: val.data && readablePath(val.data)}
               if (inode.refs.indexOf(val.name) === -1) inode.refs.push(val.name)
               putInode(value.snapshot, val.ino, inode, function (err) {
                 if (err) return cb(err)
-                snapshot()
+                cb(null, {raw: raw, value: val})
               })
             })
           })
@@ -446,7 +455,12 @@ module.exports = function (home) {
         })
       }
 
-      pump(s, through(write), function (err) {
+      var onhash = function (data, enc, cb) {
+        hash.update(data.raw)
+        snapshots.put(space + '!' + lexint.pack(i++, 'hex'), data.value, cb)
+      }
+
+      pump(s, parallel(64, write), through.obj(onhash), function (err) {
         if (err) return cb(err)
         if (hash.digest('hex') !== value.snapshot) return cb(new Error('checksum mismatch'))
         plex.emit('node', node)
@@ -457,7 +471,13 @@ module.exports = function (home) {
       })
     }
 
-    pump(logIncoming, log.replicate({live: opts.live, process: parallel(64, onnode)}), logOutgoing, function () {
+    var graph = log.replicate({live: opts.live, process: through.obj({highWaterMark: 100}, onnode)})
+
+    graph.on('error', function (err) {
+      plex.destroy(err)
+    })
+
+    pump(logIncoming, graph, logOutgoing, function () {
       plex.end()
     })
 

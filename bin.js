@@ -45,6 +45,8 @@ if (cmd === 'replicate') {
   var stream = transports(argv._[1])
   var rs = cauf.replicate(argv)
 
+  stream.on('warm', console.error)
+
   if (argv._[1] !== '-' && !argv.quiet) {
     rs.on('receive-data', function (data) {
       console.log('receive-data: ' + data)
