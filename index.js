@@ -512,6 +512,7 @@ module.exports = function (home) {
 
           if (file.mode & 040000) return onstat(null, root)
           getInode(layer, file.ino, function (err, inode) {
+            if (err) throw new Error('NO INODE FOR ' + name)
             if (err) return cb(fuse.errno(err.code))
             nlink = inode.refs.length
             fs.lstat(path.join(home, inode.data), onstat)
