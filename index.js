@@ -373,11 +373,14 @@ module.exports = function (home) {
     }
 
     var del = function (name, ino, cb) {
+      console.log('DELETING', name, ino)
       var oninode = function (err) {
         if (err) return cb(err)
         getInode(mount.id, ino, function (err, data) {
           if (err) return cb()
-          data.refs.splice(data.refs.indexOf(name), 1)
+          var i = data.refs.indexOf(name)
+          if (i < 0) throw new Error('BAD INODE: ' + name)
+          data.refs.splice(i, 1)
           if (data.refs.length) return putInode(mount.id, ino, data, cb)
           delInode(mount.id, ino, function (err) {
             if (err) return cb(err)
@@ -611,7 +614,7 @@ module.exports = function (home) {
           if (err) return cb(fuse.errno(err.code))
           mkdirp(path.join(home, filename, '..'), function (err) {
             if (err) return cb(fuse.errno(err.code))
-            fs.open(path.join(home, filename), 'w', mode, function (err, fd) {
+            fs.open(path.join(home, filename), 'w+', mode, function (err, fd) {
               if (err) return cb(fuse.errno(err.code))
               cauf.put(mount.id, name, {mode: mode, ino: inode}, function (err) {
                 if (err) return cb(fuse.errno(err.code))
