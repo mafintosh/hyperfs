@@ -524,7 +524,7 @@ module.exports = function (home) {
       }
 
       ops.getattr = function (name, cb) {
-        ops.getfattr(name, -1, cb)
+        ops.fgetattr(name, -1, cb)
       }
 
       ops.readdir = function (name, cb) {
