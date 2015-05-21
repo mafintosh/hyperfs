@@ -39,7 +39,7 @@ if (cmd === 'create') {
 }
 
 if (cmd === 'mount') {
-  var mnt = cauf.mount(argv._[1], argv._[2])
+  var mnt = cauf.mount(argv._[1], argv._[2], argv)
   mnt.on('ready', function () {
     console.log(mnt.id, 'mounted')
     ;[].concat(mnt.layers).reverse().slice(1).forEach(function (l) {

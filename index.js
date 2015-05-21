@@ -748,6 +748,7 @@ module.exports = function (home) {
       }
 
       ops.utimens = function (name, ctime, mtime, cb) {
+        if (opts.time === false) return cb(0)
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           file.ctime = ctime.getTime()
