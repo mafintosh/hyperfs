@@ -460,7 +460,9 @@ module.exports = function (home) {
         snapshots.put(space + '!' + lexint.pack(i++, 'hex'), data.value, cb)
       }
 
-      pump(s, parallel(64, write), through.obj(onhash), function (err) {
+      // hwm should be to set to a really high number as we handle that in the protocol
+      // TODO: make module that "buffers" in leveldb
+      pump(s, through.obj({highWaterMark: 1000000}), parallel(32, write), through.obj(onhash), function (err) {
         if (err) return cb(err)
         if (hash.digest('hex') !== value.snapshot) return cb(new Error('checksum mismatch'))
         plex.emit('node', node)
