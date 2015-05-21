@@ -781,7 +781,7 @@ module.exports = function (home) {
 
       var loop = function (i) {
         if (i < 0) return done(1024)
-        countInodes(mount.layers[mount.layers.length - i], function (_, cnt) {
+        countInodes(mount.layers[i], function (_, cnt) {
           if (cnt) return done(cnt)
           loop(i - 1)
         })
