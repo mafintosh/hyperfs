@@ -430,7 +430,7 @@ module.exports = function (home) {
         var copy = function (from, to, cb) {
           mkdirp(path.join(home, to, '..'), function (err) {
             if (err) return cb(err)
-            if (file.special) return mknod(to, file.mode, file.rdev, cb)
+            if (file.special) return mknod(path.join(home, to), file.mode, file.rdev, cb)
             pump(fs.createReadStream(path.join(home, from)), fs.createWriteStream(path.join(home, to)), cb)
           })
         }
@@ -474,7 +474,6 @@ module.exports = function (home) {
             if (err) return cb(fuse.errno(err.code))
             getInode(mount.id, file.ino, function (err, data) {
               if (err) return cb(fuse.errno(err.code))
-                console.log(data)
               data.refs.push(dest)
               putInode(mount.id, file.ino, data, wrap(cb))
             })
@@ -552,7 +551,6 @@ module.exports = function (home) {
 
       ops.rename = function (name, dest, cb) {
         ops.link(name, dest, function (errno) {
-          console.log(errno)
           if (errno) return cb(errno)
           ops.unlink(name, cb)
         })
