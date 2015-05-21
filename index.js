@@ -14,6 +14,10 @@ var through = require('through2')
 var subleveldown = require('subleveldown')
 var enumerate = require('level-enumerate')
 var from = require('from2')
+var hyperlog = require('hyperlog')
+var multiplex = require('multiplex')
+var parallel = require('parallel-transform')
+var os = require('os')
 
 var noop = function () {}
 var ENOENT = new Error('ENOENT')
@@ -28,6 +32,7 @@ module.exports = function (home) {
   var snapshots = subleveldown(db, 'snapshots')
   var ancestors = subleveldown(db, 'ancestors')
   var volumes = subleveldown(db, 'volumes', {valueEncoding: 'json'})
+  var log = hyperlog(subleveldown(db, 'log'))
 
   var writeablePath = function () {
     var name = crypto.randomBytes(32).toString('hex')
@@ -117,12 +122,11 @@ module.exports = function (home) {
   }
 
   cauf.createBlobReadStream = function (key) {
-    return fs.createReadStream(path.join(home, readablePath(hash)))
+    return fs.createReadStream(path.join(home, readablePath(key)))
   }
 
-  cauf.createBlobWriteStream = function () {
-    if (!cb) cb = noop
-    var filename = path.join(os.tmpdir(), 'cauf-tmp-' + crypto.randomBytes(32).digest('hex'))
+  cauf.createBlobWriteStream = function (cb) {
+    var filename = path.join(os.tmpdir(), 'cauf-tmp-' + crypto.randomBytes(32).toString('hex'))
     var hash = crypto.createHash('sha256')
 
     var write = function (data, enc, cb) {
@@ -130,38 +134,44 @@ module.exports = function (home) {
       cb(null, data)
     }
 
-    var stream = pumpify(through(write), fs.createWriteStream(filename))
+    var ws = fs.createWriteStream(filename)
+    var hasher = through(write)
 
-    stream.on('prefinish', function () {
-      stream.cork()
-      stream.key = hash.digest('hex')
-      fs.rename(filename, path.join(home, readablePath(stream.key)), function (err) {
-        if (err) return stream.destroy(err)
-        stream.uncork()
-      })
-    })
+    pump(hasher, ws, function (err) {
+      var key = hash.digest('hex')
+      var newFilename = path.join(home, readablePath(key))
 
-    return ws
-  }
-
-  cauf.createSnapshopWriteStream = function () {
-
-  }
-
-  cauf.createSnapshopReadStream = function (key) {
-    return from.obj(function (size, cb) {
-      if (!key) return cb(null, null)
-      snapshots.get(key, function (err, data) {
+      mkdirp(path.join(newFilename, '..'), function (err) {
         if (err) return cb(err)
-        data = JSON.parse(data)
-        key = data.prev
-        cb(null, data)
+        fs.rename(filename, newFilename, function (err) {
+          if (err) return cb(err)
+          cb(null, key)
+        })
       })
+    })
+
+    return hasher
+  }
+
+  cauf.readSnapshot = function (key, cb) {
+    snapshots.get(key, function (err, space) {
+      if (err) return cb(err)
+
+      var rs = snapshots.createValueStream({
+        gt: space + '!',
+        lt: space + '!\xff',
+        valueEncoding: 'json'
+      })
+
+      cb(null, rs)
     })
   }
 
-  cauf.snapshot = function (id) { // don't mutate the layer while running this for now
+  cauf.snapshot = function (id, opts) { // don't mutate the layer while running this for now
     var monitor = new events.EventEmitter()
+    var message = opts.message
+
+    monitor.node = null
 
     var onindex = function (v) {
       var key = monitor.key = v.snapshot
@@ -171,42 +181,44 @@ module.exports = function (home) {
       volumes.put(id, v, function (err) {
         if (err) return monitor.emit('error', err)
 
-        pump(
-          cauf.createSnapshopReadStream(key),
-          through.obj(function (data, enc, cb) {
-            cauf.put(key, data.name, {special: data.special, deleted: data.deleted, mode: data.mode, uid: data.uid, gid: data.gid, ino: data.ino, rdev: data.rdev}, function (err) {
-              if (err) return cb(err)
-              cauf.del(id, data.name, function () {
-                getInode(id, data.ino || 0, function (err, inode) {
-                  if (err && err.notFound) return cb() // we already processed this one
+        var write = function (data, enc, cb) {
+          cauf.put(key, data.name, {special: data.special, deleted: data.deleted, mode: data.mode, uid: data.uid, gid: data.gid, ino: data.ino, rdev: data.rdev}, function (err) {
+            if (err) return cb(err)
+            cauf.del(id, data.name, function () {
+              getInode(id, data.ino || 0, function (err, inode) {
+                if (err && err.notFound) return cb() // we already processed this one
+                if (err) return cb(err)
+
+                monitor.emit('snapshot', data.name)
+
+                if (!data.data || data.special) {
+                  putInode(key, data.ino, inode, function (err) {
+                    if (err) return cb(err)
+                    delInode(id, data.ino, cb)
+                  })
+                  return
+                }
+
+                var filename = readablePath(data.data)
+                mkdirp(path.join(home, filename, '..'), function (err) {
                   if (err) return cb(err)
-
-                  monitor.emit('snapshot', data.name)
-
-                  if (!data.data || data.special) {
+                  fs.rename(path.join(home, inode.data), path.join(home, filename), function () { // ignore errors for now to be resumeable
+                    inode.data = filename
                     putInode(key, data.ino, inode, function (err) {
                       if (err) return cb(err)
                       delInode(id, data.ino, cb)
-                    })
-                    return
-                  }
-
-                  var filename = readablePath(data.data)
-                  mkdirp(path.join(home, filename, '..'), function (err) {
-                    if (err) return cb(err)
-                    fs.rename(path.join(home, inode.data), path.join(home, filename), function () { // ignore errors for now to be resumeable
-                      inode.data = filename
-                      putInode(key, data.ino, inode, function (err) {
-                        if (err) return cb(err)
-                        delInode(id, data.ino, cb)
-                      })
                     })
                   })
                 })
               })
             })
-          }),
-          function () {
+          })
+        }
+
+        cauf.readSnapshot(key, function (err, rs) {
+          if (err) return monitor.emit('error', err)
+
+          pump(rs, through.obj(write), function () {
             var done = function (err) {
               if (err) return monitor.emit('error', err)
               volumes.put(id, v, function (err) {
@@ -215,14 +227,25 @@ module.exports = function (home) {
               })
             }
 
-            var oldSnapshot = v.ancestor
-            v.ancestor = key
-            v.snapshot = null
+            var node = {
+              snapshot: key,
+              message: message || ''
+            }
 
-            if (oldSnapshot) ancestors.put(key, oldSnapshot, done)
-            else ancestors.put(key, key, done)
-          }
-        )
+            log.add(v.node ? [v.node] : [], JSON.stringify(node), function (err, node) {
+              if (err) return monitor.emit('error', err)
+
+              v.node = node.key
+              v.snapshot = null
+              monitor.node = v.node
+
+              volumes.put(id, v, function (err) {
+                if (err) return monitor.emit('error', err)
+                monitor.emit('finish')
+              })
+            })
+          })
+        })
       })
     }
 
@@ -230,7 +253,9 @@ module.exports = function (home) {
       if (err) return monitor.emit(new Error('Volume does not exist'))
       if (v.snapshot) return onindex(v)
 
-      var key = null
+      var space = crypto.randomBytes(32).toString('hex')
+      var snapshotHash = crypto.createHash('sha256')
+      var i = 0
 
       pump(
         metadata.createReadStream({
@@ -251,7 +276,6 @@ module.exports = function (home) {
                 deleted: file.value.deleted,
                 special: file.value.special,
                 data: file.hash,
-                prev: key,
                 mode: file.value.mode,
                 rdev: file.value.rdev,
                 uid: file.value.uid,
@@ -259,8 +283,8 @@ module.exports = function (home) {
                 ino: file.value.ino
               })
 
-              key = crypto.createHash('sha256').update(val).digest('hex')
-              snapshots.put(key, val, cb)
+              snapshotHash.update(val)
+              snapshots.put(space + '!' + lexint.pack(i++, 'hex'), val, cb)
             }
 
             if (!data || !data.data || file.value.special) return ondone()
@@ -280,8 +304,12 @@ module.exports = function (home) {
         }),
         function (err) {
           if (err) return monitor.emit('error', err)
-          v.snapshot = key
-          onindex(v)
+          var key = snapshotHash.digest('hex')
+          snapshots.put(key, space, function (err) {
+            if (err) return monitor.emit('error', err)
+            v.snapshot = key
+            onindex(v)
+          })
         }
       )
     })
@@ -289,20 +317,24 @@ module.exports = function (home) {
     return monitor
   }
 
-  cauf.listSnapshots = function () {
-    return ancestors.createKeyStream()
+  cauf.nodes = function () {
+    var write = function (node, enc, cb) {
+      node.value = JSON.parse(node.value)
+      cb(null, node)
+    }
+
+    return pump(log.createReadStream(), through.obj(write))
   }
 
   cauf.ancestors = function (key, cb) {
     var list = []
 
     var loop = function (key) {
-      snapshots.get(key, function (_, snapshot) {
-        if (snapshot) list.unshift(key) // is a snapshot \o/
-        ancestors.get(key, function (_, parent) {
-          if (parent && parent !== key) return loop(parent)
-          cb(null, list)
-        })
+      log.get(key, function (err, node) {
+        if (err) return cb(err)
+        list.unshift({node: node.key, snapshot: JSON.parse(node.value).snapshot})
+        if (!node.links.length) return cb(null, list)
+        loop(node.links[0])
       })
     }
 
@@ -336,8 +368,100 @@ module.exports = function (home) {
     if (!opts) opts = {}
     volumes.get(key, function (_, v) {
       if (v) return cb(new Error('volume already exists'))
-      volumes.put(key, {id: key, ancestor: opts.ancestor}, cb)
+      volumes.put(key, {id: key, node: opts.node}, cb)
     })
+  }
+
+  cauf.replicate = function (opts) {
+    if (!opts) opts = {}
+
+    var plex = multiplex(function (stream, id) {
+      var parts = id.split('/')
+
+      if (parts[0] === 's') {
+        var encode = function (data, enc, cb) {
+          cb(null, JSON.stringify(data))
+        }
+
+        plex.emit('send-snapshot', parts[1])
+        cauf.readSnapshot(parts[1], function (err, rs) {
+          if (err) return stream.destroy(err)
+          pump(rs, through.obj(encode), stream)
+        })
+        return
+      }
+
+      if (parts[0] === 'd') {
+        plex.emit('send-data', parts[1])
+        pump(cauf.createBlobReadStream(parts[1]), stream)
+        return
+      }
+    })
+
+    var logOutgoing = plex.createStream('hyperlog')
+    var logIncoming = plex.receiveStream('hyperlog')
+
+    var onnode = function (node, cb) {
+      var value = JSON.parse(node.value.toString())
+      var s = plex.createStream('s/' + value.snapshot)
+      var hash = crypto.createHash('sha256')
+      var space = crypto.randomBytes(32).toString('hex')
+      var i = 0
+
+      plex.emit('receive-snapshot', value.snapshot)
+
+      var write = function (val, enc, cb) {
+        var raw = val.toString()
+        val = JSON.parse(raw)
+
+        var snapshot = function () {
+          hash.update(raw)
+          snapshots.put(space + '!' + lexint.pack(i++, 'hex'), val, cb)
+        }
+
+        var done = function () {
+          var meta = {special: val.special, deleted: val.deleted, mode: val.mode, uid: val.uid, gid: val.gid, ino: val.ino, rdev: val.rdev}
+          cauf.put(value.snapshot, val.name, meta, function (err) {
+            getInode(value.snapshot, val.ino, function (_, inode) {
+              inode = inode || {refs: [], data: val.data && readablePath(val.data)}
+              if (inode.refs.indexOf(val.name) === -1) inode.refs.push(val.name)
+              putInode(value.snapshot, val.ino, inode, function (err) {
+                if (err) return cb(err)
+                snapshot()
+              })
+            })
+          })
+        }
+
+        if (!val.data) return done()
+
+        cauf.hasBlob(val.data, function (err, exists) {
+          if (err) return cb(err)
+          if (exists) return done()
+          plex.emit('receive-data', val.data)
+          pump(plex.createStream('d/' + val.data, {chunked: true}), cauf.createBlobWriteStream(function (err, key) {
+            if (err) return cb(err)
+            done()
+          }))
+        })
+      }
+
+      pump(s, through(write), function (err) {
+        if (err) return cb(err)
+        if (hash.digest('hex') !== value.snapshot) return cb(new Error('checksum mismatch'))
+        plex.emit('node', node)
+        snapshots.put(value.snapshot, space, function (err) {
+          if (err) return cb(err)
+          cb(null, node)
+        })
+      })
+    }
+
+    pump(logIncoming, log.replicate({live: opts.live, process: parallel(64, onnode)}), logOutgoing, function () {
+      plex.end()
+    })
+
+    return plex
   }
 
   cauf.mount = function (key, mnt, opts) {
@@ -347,7 +471,7 @@ module.exports = function (home) {
 
     mount.id = null
     mount.layers = null
-    mount.ancestor = null
+    mount.node = null
     mount.mountpoint = mnt
     mount.inodes = 0
     mount.unmount = cauf.unmount.bind(cauf, mnt)
@@ -766,10 +890,18 @@ module.exports = function (home) {
     var onlayers = function (err, layers) {
       if (err) return mount.emit('error', err)
 
-      mount.layers = layers.concat(mount.id) // push writable layer
+      var toSnapshot = function (val) {
+        return val.snapshot
+      }
 
-      var done = function (ino) {
-        mount.inodes = ino
+      var toNode = function (val) {
+        return val.node
+      }
+
+      mount.layers = layers.map(toSnapshot).concat(mount.id) // push writable layer
+      mount.nodes = layers.map(toNode)
+
+      var done = function () {
         mkdirp(mnt, function (err) {
           if (err) return mount.emit('error', err)
           fs.stat(mnt, function (err, st) {
@@ -779,10 +911,11 @@ module.exports = function (home) {
         })
       }
 
+      mount.inodes = 1024
       var loop = function (i) {
-        if (i < 0) return done(1024)
+        if (i < 0) return done()
         countInodes(mount.layers[i], function (_, cnt) {
-          if (cnt) return done(cnt)
+          if (cnt) mount.inodes = Math.max(cnt, mount.inodes)
           loop(i - 1)
         })
       }
@@ -792,10 +925,12 @@ module.exports = function (home) {
 
     volumes.get(key, function (err, v) {
       if (err) return mount.emit('error', new Error('Volume does not exist'))
+
       mount.id = key
       mount.mountpoint = mnt
-      if (!v.ancestor) return onlayers(null, [])
-      cauf.ancestors(v.ancestor, onlayers)
+      mount.node = v.node
+      if (!v.node) return onlayers(null, [])
+      cauf.ancestors(v.node, onlayers)
     })
 
     return mount

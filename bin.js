@@ -2,7 +2,8 @@
 
 var minimist = require('minimist')
 var mkdirp = require('mkdirp')
-var argv = minimist(process.argv.slice(2))
+var transports = require('transport-stream')({command: 'cauf replicate -'})
+var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q'}})
 var s = argv.store || 'cauf'
 
 mkdirp.sync(s)
@@ -16,8 +17,10 @@ if (cmd === 'list' || cmd === 'ls') {
   return
 }
 
-if (cmd === 'list-snapshots' || cmd === 'ls-snapshots') {
-  cauf.listSnapshots().on('data', console.log)
+if (cmd === 'nodes') {
+  cauf.nodes().on('data', function (data) {
+    console.log(data.key+': ' + (data.value.message || '(no message)'))
+  })
   return
 }
 
@@ -38,11 +41,37 @@ if (cmd === 'create') {
   return
 }
 
+if (cmd === 'replicate') {
+  var stream = transports(argv._[1])
+  var rs = cauf.replicate(argv)
+
+  if (argv._[1] !== '-' && !argv.quiet) {
+    rs.on('receive-data', function (data) {
+      console.log('receive-data: ' + data)
+    })
+
+    rs.on('receive-snapshot', function (hash) {
+      console.log('receive-snapshot: ' + hash)
+    })
+
+    rs.on('send-data', function (data) {
+      console.log('send-data: ' + data)
+    })
+
+    rs.on('send-snapshot', function (hash) {
+      console.log('send-snapshot: ' + hash)
+    })
+  }
+
+  stream.pipe(rs).pipe(stream)
+  return
+}
+
 if (cmd === 'mount') {
   var mnt = cauf.mount(argv._[1], argv._[2], argv)
   mnt.on('ready', function () {
     console.log(mnt.id, 'mounted')
-    ;[].concat(mnt.layers).reverse().slice(1).forEach(function (l) {
+    ;[].concat(mnt.nodes).reverse().forEach(function (l) {
       console.log('<-- ' + l)
     })
   })
@@ -55,7 +84,7 @@ if (cmd === 'mount') {
 }
 
 if (cmd === 'snapshot') {
-  var snapshot = cauf.snapshot(argv._[1])
+  var snapshot = cauf.snapshot(argv._[1], argv)
   snapshot.on('index', function (name) {
     console.log('Indexing ' + name)
   })
@@ -63,7 +92,7 @@ if (cmd === 'snapshot') {
     console.log('Snapshotting ' + name)
   })
   snapshot.on('finish', function () {
-    console.log('Snapshot complete: ' + snapshot.key)
+    console.log('Snapshot complete: ' + snapshot.node)
   })
   return
 }
