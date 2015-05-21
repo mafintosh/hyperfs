@@ -183,7 +183,7 @@ module.exports = function (home) {
 
                   monitor.emit('snapshot', data.name)
 
-                  if (!data.data) {
+                  if (!data.data || data.special) {
                     putInode(key, data.ino, inode, function (err) {
                       if (err) return cb(err)
                       delInode(id, data.ino, cb)
@@ -263,7 +263,7 @@ module.exports = function (home) {
               snapshots.put(key, val, cb)
             }
 
-            if (!data || !data.data) return ondone()
+            if (!data || !data.data || file.value.special) return ondone()
 
             var hash = crypto.createHash('sha256')
             var rs = fs.createReadStream(path.join(home, data.data))
