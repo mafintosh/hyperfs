@@ -497,7 +497,7 @@ module.exports = function (home) {
     }
 
     var del = function (name, ino, cb) {
-      console.log('DELETING', name, ino)
+      if (opts.debug) console.log('delete:', name)
       var oninode = function (err) {
         if (err) return cb(err)
         getInode(mount.id, ino, function (err, data) {
@@ -530,6 +530,8 @@ module.exports = function (home) {
         if (err && name === '/') return cb(null, {mode: root.mode})
         if (err) return cb(err)
         if (layer === mount.id) return cb(null, file)
+
+        if (opts.debug) console.log('copy-on-write:', name)
 
         var store = function (data) {
           if (data.refs.length === 1) {
@@ -611,6 +613,8 @@ module.exports = function (home) {
       }
 
       ops.link = function (name, dest, cb) {
+        if (opts.debug) console.log('link:', name, dest)
+
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           cauf.put(mount.id, dest, file, function (err) {
@@ -691,6 +695,7 @@ module.exports = function (home) {
       }
 
       ops.truncate = function (name, size, cb) {
+        if (opts.debug) console.log('truncate:', name, size)
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           getInode(mount.id, file.ino, function (err, data) {
@@ -701,6 +706,7 @@ module.exports = function (home) {
       }
 
       ops.ftruncate = function (name, fd, size, cb) {
+        if (opts.debug) console.log('ftruncate:', name, fd, size)
         fs.ftruncate(fd, size, wrap(cb))
       }
 
@@ -709,6 +715,7 @@ module.exports = function (home) {
       }
 
       ops.rename = function (name, dest, cb) {
+        if (opts.debug) console.log('rename:', name, dest)
         ops.link(name, dest, function (errno) {
           if (errno) return cb(errno)
           ops.unlink(name, cb)
@@ -716,7 +723,7 @@ module.exports = function (home) {
       }
 
       ops.mknod = function (name, mode, dev, cb) {
-        console.log('mknod', name, mode, dev)
+        if (opts.debug) console.log('mknod:', name, mode, dev)
         var inode = ++mount.inodes
         var filename = writeablePath()
 
@@ -763,6 +770,7 @@ module.exports = function (home) {
       }
 
       ops.create = function (name, mode, cb) {
+        if (opts.debug) console.log('create:', name, mode)
         var inode = ++mount.inodes
         var filename = writeablePath()
 
@@ -782,6 +790,7 @@ module.exports = function (home) {
       }
 
       ops.unlink = function (name, cb) {
+        if (opts.debug) console.log('unlink:', name)
         cow(name, function (err, file) { // TODO: don't copy file if refs === 1 and deleting
           if (err) return cb(fuse.errno(err.code))
           del(name, file.ino, wrap(cb))
@@ -789,6 +798,7 @@ module.exports = function (home) {
       }
 
       ops.mkdir = function (name, mode, cb) {
+        if (opts.debug) console.log('mkdir:', name, mode)
         var inode = ++mount.inodes
         putInode(mount.id, inode, {refs: [name]}, function (err) {
           if (err) return cb(fuse.errno(err.code))
@@ -797,6 +807,7 @@ module.exports = function (home) {
       }
 
       ops.rmdir = function (name, cb) {
+        if (opts.debug) console.log('rmdir:', name)
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           del(name, file.ino, wrap(cb))
@@ -822,6 +833,7 @@ module.exports = function (home) {
       }
 
       ops.symlink = function (name, dest, cb) {
+        if (opts.debug) console.log('symlink:', name, dest)
         ops.create(dest, 41453, function (errno, fd) {
           if (errno) return cb(errno)
 
@@ -855,6 +867,7 @@ module.exports = function (home) {
       }
 
       ops.chmod = function (name, mode, cb) {
+        if (opts.debug) console.log('chmod:', name, mode)
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           file.mode = mode
@@ -863,6 +876,7 @@ module.exports = function (home) {
       }
 
       ops.chown = function (name, uid, gid, cb) {
+        if (opts.debug) console.log('chown:', name, mode)
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           if (uid > -1) file.uid = uid

@@ -3,7 +3,7 @@
 var minimist = require('minimist')
 var mkdirp = require('mkdirp')
 var transports = require('transport-stream')({command: 'cauf replicate -'})
-var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q'}})
+var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q', debug: 'D'}})
 var s = argv.store || 'cauf'
 
 mkdirp.sync(s)
