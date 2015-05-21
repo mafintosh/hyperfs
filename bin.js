@@ -45,23 +45,23 @@ if (cmd === 'replicate') {
   var stream = transports(argv._[1])
   var rs = cauf.replicate(argv)
 
-  stream.on('warm', console.error)
+  stream.on('warn', console.error)
 
   if (argv._[1] !== '-' && !argv.quiet) {
     rs.on('receive-data', function (data) {
-      console.log('receive-data: ' + data)
+      console.error('receive-data: ' + data)
     })
 
     rs.on('receive-snapshot', function (hash) {
-      console.log('receive-snapshot: ' + hash)
+      console.error('receive-snapshot: ' + hash)
     })
 
     rs.on('send-data', function (data) {
-      console.log('send-data: ' + data)
+      console.error('send-data: ' + data)
     })
 
     rs.on('send-snapshot', function (hash) {
-      console.log('send-snapshot: ' + hash)
+      console.error('send-snapshot: ' + hash)
     })
   }
 
