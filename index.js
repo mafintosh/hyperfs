@@ -725,8 +725,8 @@ module.exports = function (home) {
       ops.chown = function (name, uid, gid, cb) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
-          file.uid = uid
-          file.gid = gid
+          if (uid > -1) file.uid = uid
+          if (gid > -1) file.gid = gid
           cauf.put(mount.id, name, file, wrap(cb))
         })
       }
