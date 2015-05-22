@@ -468,7 +468,7 @@ module.exports = function (home) {
       }
 
       var updateHash = function (val, enc, cb) {
-        hash.update(val)
+        hash.update(val.toString())
         cb(null, val)
       }
 
