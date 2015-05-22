@@ -6,7 +6,7 @@ A content-addressable union file system that replicates and is build on top of f
 npm install -g hyperfs
 ```
 
-!(logo.png)[logo.png]
+![logo.png](logo.png)
 
 ## Usage
 
