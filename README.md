@@ -1,14 +1,16 @@
 # hyperfs
 
-A content-addressable union file system that replicates and is build on top of fuse, leveldb, and node
-
-```
-npm install -g hyperfs
-```
+A content-addressable union file system that replicates using [hyperlog](https://github.com/mafintosh/hyperlog) and is build on top of fuse, leveldb, and node
 
 ![logo.png](logo.png)
 
 ## Usage
+
+First install hyperfs from npm
+
+``` sh
+npm install -g hyperfs
+```
 
 ``` sh
 hyperfs create test # create a new fs volume
