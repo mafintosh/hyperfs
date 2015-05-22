@@ -1,6 +1,6 @@
 {
   "name": "hyperfs",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A content-addressable union file system that replicates and is build on top of fuse, leveldb and node",
   "main": "index.js",
   "bin": {
