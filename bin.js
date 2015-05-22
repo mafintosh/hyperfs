@@ -106,6 +106,7 @@ if (cmd === 'exec') {
 
       proc.stdout.pipe(process.stdout)
       proc.stderr.pipe(process.stderr)
+      process.stdin.pipe(proc.stdin)
 
       proc.on('exit', function (code) {
         cauf.unmount(folder, function () {
