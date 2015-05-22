@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+var fs = require('fs')
 var minimist = require('minimist')
 var mkdirp = require('mkdirp')
 var transports = require('transport-stream')({command: 'hyperfs replicate -'})
@@ -137,4 +138,4 @@ if (cmd === 'snapshot') {
   return
 }
 
-console.log('Unknown command')
+console.log(fs.readFileSync(__dirname + '/help.txt', 'utf-8'))

@@ -1,0 +1,34 @@
+hyperfs <command> [options]
+
+  create <volume>
+    create a new volume.
+    use --node=<snapshot> to create it from a snapshot node
+    the volume data will be stored in ./hyperfs
+
+  mount <volume> <mnt>
+    mount a new volume on <mnt>.
+    use ctrl-c to unmount
+
+  remove <volume>
+    remove a volume
+
+  list
+    list all volumes
+
+  run <volume> <mnt> <cmd>
+    run a command inside a mounted volume.
+    forwards stdio and unmounts when the command ends
+
+  replicate <remote>
+    replicate all snapshots to a remote hyperfs.
+    - hyperfs replicate ./other-folder
+    - hyperfs replicate ssh://user@example.com:other-folder
+    - dupsh 'hyperfs replicate -' 'some-stream-to-remote'
+
+  snapshot <volume> --message 'friendly message'
+    snapshot a volume. will print the node hash when it succeeds
+    use this hash as the --node argument in create to create another
+    volume that looks like this one
+
+  nodes
+    print all snapshot nodes
