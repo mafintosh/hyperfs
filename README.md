@@ -10,7 +10,7 @@ Notice: This is HIGHLY experimental
 
 ## Usage
 
-```
+``` sh
 hyperfs create test # create a new fs volume
 hyperfs mount test ./mnt # mount test on ./mnt
 ```
@@ -19,7 +19,7 @@ Now open a the folder ./mnt in your favorite file explorer and start making some
 
 Using the terminal:
 
-```
+``` sh
 mkdir mnt/test
 echo hello world > mnt/test/hello.txt
 ```
@@ -30,14 +30,14 @@ Hit CTRL-C to unmount the volume.
 Now lets snapshot that volume so we can replicate it. Snapshotting just makes a readonly layer
 of the changes you've made. You can use a snapshot as a base fs for a new volume
 
-```
+``` sh
 hyperfs snapshot test
 ```
 
 This will print the snapshot hash when it succeeds.
 Now lets replicate the file system to another machine.
 
-```
+``` sh
 # assuming hyperfs is installed on example.com
 hyperfs replicate ssh://user@example.com
 ```
@@ -55,7 +55,7 @@ Now if you enter ./mnt you'll see that its the volume from your local machine.
 
 You can use hyperfs to build your own docker-like container platform
 
-```
+``` sh
 npm i mini-container -g # a minimal container runtime
 # create an ubuntu volume
 hyperfs create ubuntu
@@ -74,14 +74,14 @@ hyperfs snapshot my-container
 
 Now to run a bash session inside our container locally we just do
 
-```
+``` sh
 # <ctrl-d> to exit :)
 hyperfs exec my-container 'mini-container "/bin/bash"'
 ```
 
 Or to replicate our containers we just do
 
-```
+``` sh
 hyperfs replicate ssh://user@remote.com
 ssh user@remote.com
 hyperfs create my-container --node=<my-container-snapshot-hash-from-above>
