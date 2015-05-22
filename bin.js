@@ -3,6 +3,7 @@
 var fs = require('fs')
 var minimist = require('minimist')
 var mkdirp = require('mkdirp')
+var path = require('path')
 var transports = require('transport-stream')({command: 'hyperfs replicate -'})
 var execspawn = require('execspawn')
 var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q', debug: 'D', store: 's', node: 'n'}})
@@ -52,6 +53,7 @@ if (cmd === 'info') {
 }
 
 if (cmd === 'create') {
+  if (!argv._[1]) throw new Error('volume required')
   cauf.create(argv._[1], argv, console.log)
   return
 }
@@ -85,32 +87,39 @@ if (cmd === 'replicate') {
 }
 
 if (cmd === 'exec') {
-  var mnt = cauf.mount(argv._[1], argv._[2] || 'mnt', argv)
+  if (!argv._[1]) throw new Error('volume required')
+  var folder = argv.mnt || path.join(s, 'mnt', argv._[1])
 
-  mnt.on('ready', function () {
-    var proc = execspawn(argv._[3], {
-      cwd: argv._[2] || 'mnt'
-    })
+  mkdirp(folder, function (err) {
+    if (err) throw err
+    var mnt = cauf.mount(argv._[1], folder, argv)
 
-    proc.stdout.pipe(process.stdout)
-    proc.stderr.pipe(process.stderr)
+    mnt.on('ready', function () {
+      var proc = execspawn(argv._[2], {
+        cwd: folder
+      })
 
-    proc.on('exit', function (code) {
-      cauf.unmount(argv._[2] || 'mnt', function () {
-        process.exit(code)
+      proc.stdout.pipe(process.stdout)
+      proc.stderr.pipe(process.stderr)
+
+      proc.on('exit', function (code) {
+        cauf.unmount(folder, function () {
+          process.exit(code)
+        })
       })
     })
-  })
 
-  process.on('SIGINT', function () {
-    cauf.unmount(argv._[2] || 'mnt', function () {
-      process.exit()
+    process.on('SIGINT', function () {
+      cauf.unmount(folder, function () {
+        process.exit()
+      })
     })
   })
   return
 }
 
 if (cmd === 'mount') {
+  if (!argv._[1]) throw new Error('volume required')
   var mnt = cauf.mount(argv._[1], argv._[2] || 'mnt', argv)
   mnt.on('ready', function () {
     console.log(mnt.id, 'mounted')
