@@ -95,8 +95,10 @@ if (cmd === 'exec') {
     proc.stdout.pipe(process.stdout)
     proc.stderr.pipe(process.stderr)
 
-    proc.on('exit', function () {
-      cauf.unmount(argv._[2] || 'mnt')
+    proc.on('exit', function (code) {
+      cauf.unmount(argv._[2] || 'mnt', function () {
+        process.exit(code)
+      })
     })
   })
 

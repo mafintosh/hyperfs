@@ -15,8 +15,8 @@ hyperfs <command> [options]
   list
     list all volumes
 
-  run <volume> <mnt> <cmd>
-    run a command inside a mounted volume.
+  exec <volume> <mnt> <cmd>
+    execute a command inside a mounted volume.
     forwards stdio and unmounts when the command ends
 
   replicate <remote>
