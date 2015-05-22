@@ -653,8 +653,15 @@ module.exports = function (home) {
       ops.fgetattr = function (name, fd, cb) {
         if (name === '/') return cb(0, root)
 
-        get(name, function (err, file, layer) {
+        var onfile = function (err, file, layer) {
           if (err) return cb(fuse.errno(err.code))
+
+          if (file.special && layer !== mount.id) {
+            cow(name, function (err, file) {
+              onfile(err, file, mount.id)
+            })
+            return
+          }
 
           var nlink = 1
           var onstat = function (err, stat) {
@@ -686,7 +693,9 @@ module.exports = function (home) {
             if (fd < 0) fs.lstat(path.join(home, inode.data), onstat)
             else fs.fstat(fd, onstat)
           })
-        })
+        }
+
+        get(name, onfile)
       }
 
       ops.getattr = function (name, cb) {
