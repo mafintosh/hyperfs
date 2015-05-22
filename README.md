@@ -88,6 +88,9 @@ hyperfs create my-container --node=<my-container-snapshot-hash-from-above>
 hyperfs exec my-container 'mini-container "/bin/bash"'
 ```
 
+The above example only works on Linux but since hyperfs is only a file system it
+would work on OSX too assuming you changed debootstrap and the other commands to the OSX equivalents.
+
 ## Content addressed
 
 hyperfs is content addressed on the file level. This means that if you install ubuntu
