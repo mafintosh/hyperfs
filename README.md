@@ -4,13 +4,14 @@ A content-addressable union file system that replicates using [hyperlog](https:/
 
 ![logo.png](logo.png)
 
-## Usage
-
-First install hyperfs from npm
+hyperfs is installable using npm
 
 ``` sh
 npm install -g hyperfs
 ```
+
+
+## Usage
 
 ``` sh
 hyperfs create test # create a new fs volume
