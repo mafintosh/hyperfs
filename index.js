@@ -2,7 +2,6 @@ var path = require('path')
 var level = require('level')
 var crypto = require('crypto')
 var mkdirp = require('mkdirp')
-var pumpify = require('pumpify')
 var pump = require('pump')
 var fs = require('fs')
 var fuse = require('fuse-bindings')
@@ -11,12 +10,12 @@ var union = require('sorted-union-stream')
 var events = require('events')
 var mknod = require('mknod')
 var through = require('through2')
+var concurrent = require('through2-concurrent')
 var subleveldown = require('subleveldown')
 var enumerate = require('level-enumerate')
 var from = require('from2')
 var hyperlog = require('hyperlog')
 var multiplex = require('multiplex')
-var parallel = require('parallel-transform')
 var os = require('os')
 
 var noop = function () {}
@@ -429,21 +428,23 @@ module.exports = function (home) {
 
       plex.emit('receive-snapshot', value.snapshot)
 
-      var write = function (val, cb) {
-        var raw = val.toString()
-        val = JSON.parse(raw)
+      var write = function (val, enc, cb) {
+        var raw = val
+        var ptr = i++
+
+        val = JSON.parse(raw.toString())
 
         var done = function () {
           var meta = {special: val.special, deleted: val.deleted, mode: val.mode, uid: val.uid, gid: val.gid, ino: val.ino, rdev: val.rdev}
           hyperfs.put(value.snapshot, val.name, meta, function (err) {
             if (err) return cb(err)
-            if (!val.ino) return cb(null, {raw: raw, value: val})
+            if (!val.ino) return cb(null, {i: ptr, raw: raw})
             getInode(value.snapshot, val.ino, function (_, inode) {
               inode = inode || {refs: [], data: val.data && readablePath(val.data)}
               if (inode.refs.indexOf(val.name) === -1) inode.refs.push(val.name)
               putInode(value.snapshot, val.ino, inode, function (err) {
                 if (err) return cb(err)
-                cb(null, {raw: raw, value: val})
+                cb(null, {i: ptr, raw: raw})
               })
             })
           })
@@ -463,16 +464,22 @@ module.exports = function (home) {
       }
 
       var onhash = function (data, enc, cb) {
-        hash.update(data.raw)
-        snapshots.put(space + '!' + lexint.pack(i++, 'hex'), data.value, cb)
+        snapshots.put(space + '!' + lexint.pack(data.i, 'hex'), data.raw, {valueEncoding: 'binary'}, cb)
+      }
+
+      var updateHash = function (val, enc, cb) {
+        hash.update(val)
+        cb(null, val)
       }
 
       // hwm should be to set to a really high number as we handle that in the protocol
       // TODO: make module that "buffers" in leveldb
-      pump(s, through.obj({highWaterMark: 1000000}), parallel(32, write), through.obj(onhash), function (err) {
+      pump(s, through.obj({highWaterMark: 1000000}), through.obj(updateHash), concurrent.obj({maxConcurrency: 64}, write), through.obj(onhash), function (err) {
         if (err) return cb(err)
+
         if (hash.digest('hex') !== value.snapshot) return cb(new Error('checksum mismatch'))
         plex.emit('node', node)
+
         snapshots.put(value.snapshot, space, function (err) {
           if (err) return cb(err)
           cb(null, node)
