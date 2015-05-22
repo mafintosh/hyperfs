@@ -33,6 +33,11 @@ if (cmd === 'show') {
   return
 }
 
+if (cmd === 'version') {
+  console.log(require('./package.json').version)
+  return
+}
+
 if (cmd === 'nodes') {
   cauf.nodes().on('data', function (data) {
     console.log(data.key+': ' + (data.value.message || '(no message)'))
