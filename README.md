@@ -4,14 +4,15 @@ A content-addressable union file system that replicates using [hyperlog](https:/
 
 ![logo.png](logo.png)
 
-hyperfs is installable using npm
+## Usage
+
+First install hyperfs from npm
 
 ``` sh
 npm install -g hyperfs
 ```
 
-
-## Usage
+hyperfs requires fuse. If your installation fails make sure you have the [fuse requirements](https://github.com/mafintosh/fuse-bindings#requirements) installed for your platform.
 
 ``` sh
 hyperfs create test # create a new fs volume
