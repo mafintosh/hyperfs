@@ -101,12 +101,9 @@ if (cmd === 'exec') {
 
     mnt.on('ready', function () {
       var proc = execspawn(argv._[2], {
-        cwd: folder
+        cwd: folder,
+        stdio: 'inherit'
       })
-
-      proc.stdout.pipe(process.stdout)
-      proc.stderr.pipe(process.stderr)
-      process.stdin.pipe(proc.stdin)
 
       proc.on('exit', function (code) {
         cauf.unmount(folder, function () {
