@@ -173,19 +173,20 @@ module.exports = function (home) {
     })
   }
 
-  hyperfs.snapshot = function (id, opts) { // don't mutate the layer while running this for now
-    var monitor = new events.EventEmitter()
+  hyperfs.snapshot = function (id, opts, cb) { // don't mutate the layer while running this for now
+    if (typeof opts === 'function') return hyperfs.snapshot(id, null, opts)
+    if (!opts) opts = {}
+    if (!cb) cb = noop
+
     var message = opts.message
 
-    monitor.node = null
-
     var onindex = function (v) {
-      var key = monitor.key = v.snapshot
+      var key = v.snapshot
 
-      if (!v.snapshot) return monitor.emit('finish')
+      if (!v.snapshot) return cb()
 
       volumes.put(id, v, function (err) {
-        if (err) return monitor.emit('error', err)
+        if (err) return cb(err)
 
         var write = function (data, enc, cb) {
           hyperfs.put(key, data.name, {special: data.special, deleted: data.deleted, mode: data.mode, uid: data.uid, gid: data.gid, ino: data.ino, rdev: data.rdev}, function (err) {
@@ -195,7 +196,7 @@ module.exports = function (home) {
                 if (err && err.notFound) return cb() // we already processed this one
                 if (err) return cb(err)
 
-                monitor.emit('snapshot', data.name)
+                if (opts.debug) console.error('Snapshotting', data.name)
 
                 if (!data.data || data.special) {
                   putInode(key, data.ino, inode, function (err) {
@@ -222,32 +223,23 @@ module.exports = function (home) {
         }
 
         hyperfs.readSnapshot(key, function (err, rs) {
-          if (err) return monitor.emit('error', err)
+          if (err) return cb(err)
 
           pump(rs, through.obj(write), function () {
-            var done = function (err) {
-              if (err) return monitor.emit('error', err)
-              volumes.put(id, v, function (err) {
-                if (err) return monitor.emit('error', err)
-                monitor.emit('finish')
-              })
-            }
-
             var node = {
               snapshot: key,
               message: message || ''
             }
 
             log.add(v.node ? [v.node] : [], JSON.stringify(node), function (err, node) {
-              if (err) return monitor.emit('error', err)
+              if (err) return cb(err)
 
               v.node = node.key
               v.snapshot = null
-              monitor.node = v.node
 
               volumes.put(id, v, function (err) {
-                if (err) return monitor.emit('error', err)
-                monitor.emit('finish')
+                if (err) return cb(err)
+                cb(null, node.key)
               })
             })
           })
@@ -256,7 +248,7 @@ module.exports = function (home) {
     }
 
     volumes.get(id, function (err, v) {
-      if (err) return monitor.emit(new Error('Volume does not exist'))
+      if (err) return cb(new Error('Volume does not exist'))
       if (v.snapshot) return onindex(v)
 
       var space = crypto.randomBytes(32).toString('hex')
@@ -271,7 +263,7 @@ module.exports = function (home) {
         through.obj(function (file, enc, cb) {
           var name = file.key.slice(file.key.lastIndexOf('!') + 1)
 
-          monitor.emit('index', name)
+          if (opts.debug) console.error('Indexing', name)
 
           getInode(id, file.value.ino || 0, function (err, data) {
             if (err && !err.notFound) return cb(err)
@@ -309,18 +301,16 @@ module.exports = function (home) {
           })
         }),
         function (err) {
-          if (err) return monitor.emit('error', err)
+          if (err) return cb(err)
           var key = snapshotHash.digest('hex')
           snapshots.put(key, space, function (err) {
-            if (err) return monitor.emit('error', err)
+            if (err) return cb(err)
             v.snapshot = key
             onindex(v)
           })
         }
       )
     })
-
-    return monitor
   }
 
   hyperfs.nodes = function () {
@@ -384,6 +374,16 @@ module.exports = function (home) {
     var drains = []
     var blobs = 0
 
+    var onblobwrite = function (data, enc, cb) {
+      plex.emit('write', data.length)
+      cb(null, data)
+    }
+
+    var onblobread = function (data, enc, cb) {
+      plex.emit('read', data.length)
+      cb(null, data)
+    }
+
     var plex = multiplex(function (stream, id) {
       var parts = id.split('/')
 
@@ -405,7 +405,7 @@ module.exports = function (home) {
         plex.emit('send-data', parts[1])
         blobs++
         graph.cork()
-        pump(hyperfs.createBlobReadStream(parts[1]), stream, function () {
+        pump(hyperfs.createBlobReadStream(parts[1]), through(onblobwrite), stream, function () {
           blobs--
           if (!blobs) {
             while (drains.length) drains.shift()()
@@ -453,7 +453,7 @@ module.exports = function (home) {
           if (err) return cb(err)
           if (exists) return done()
           plex.emit('receive-data', val.data)
-          pump(plex.createStream('d/' + val.data, {chunked: true}), hyperfs.createBlobWriteStream(function (err, key) {
+          pump(plex.createStream('d/' + val.data, {chunked: true}), through(onblobread), hyperfs.createBlobWriteStream(function (err, key) {
             if (err) return cb(err)
             done()
           }))
