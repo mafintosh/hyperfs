@@ -591,7 +591,7 @@ module.exports = function (home) {
           getInode(layer, file.ino, function (err, data) {
             if (err) return cb(err)
 
-            if (!data.data) {
+            if (!data.data && !file.special) {
               putInode(mount.id, file.ino, data, function (err) {
                 if (err) return cb(err)
                 store(data)
