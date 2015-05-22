@@ -424,27 +424,24 @@ module.exports = function (home) {
       var s = plex.createStream('s/' + value.snapshot)
       var hash = crypto.createHash('sha256')
       var space = crypto.randomBytes(32).toString('hex')
-      var i = 0
+      var ptr = 0
 
       plex.emit('receive-snapshot', value.snapshot)
 
-      var write = function (val, enc, cb) {
-        var raw = val
-        var ptr = i++
-
-        val = JSON.parse(raw.toString())
+      var write = function (data, enc, cb) {
+        var val = data.obj
 
         var done = function () {
           var meta = {special: val.special, deleted: val.deleted, mode: val.mode, uid: val.uid, gid: val.gid, ino: val.ino, rdev: val.rdev}
           hyperfs.put(value.snapshot, val.name, meta, function (err) {
             if (err) return cb(err)
-            if (!val.ino) return cb(null, {i: ptr, raw: raw})
+            if (!val.ino) return cb(null, data)
             getInode(value.snapshot, val.ino, function (_, inode) {
               inode = inode || {refs: [], data: val.data && readablePath(val.data)}
               if (inode.refs.indexOf(val.name) === -1) inode.refs.push(val.name)
               putInode(value.snapshot, val.ino, inode, function (err) {
                 if (err) return cb(err)
-                cb(null, {i: ptr, raw: raw})
+                cb(null, data)
               })
             })
           })
@@ -464,12 +461,13 @@ module.exports = function (home) {
       }
 
       var onhash = function (data, enc, cb) {
-        snapshots.put(space + '!' + lexint.pack(data.i, 'hex'), data.raw, {valueEncoding: 'binary'}, cb)
+        snapshots.put(space + '!' + lexint.pack(data.i, 'hex'), data.raw, {valueEncoding: 'utf-8'}, cb)
       }
 
       var updateHash = function (val, enc, cb) {
-        hash.update(val.toString())
-        cb(null, val)
+        var raw = val.toString()
+        hash.update(raw)
+        cb(null, {i: ptr++, raw: raw, obj: JSON.parse(raw)})
       }
 
       // hwm should be to set to a really high number as we handle that in the protocol
