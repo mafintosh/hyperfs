@@ -1,13 +1,14 @@
 {
-  "name": "content-addressable-union-fs",
+  "name": "hyperfs",
   "version": "0.0.0",
-  "description": "A content-addressable union file system build on top of fuse, leveldb and node",
+  "description": "A content-addressable union file system that replicates and is build on top of fuse, leveldb and node",
   "main": "index.js",
   "bin": {
-    "cauf": "bin.js"
+    "hyperfs": "bin.js"
   },
   "dependencies": {
     "cuid": "^1.2.5",
+    "execspawn": "^0.2.1",
     "from2": "^1.3.0",
     "fuse-bindings": "^2.4.3",
     "hyperlog": "^3.7.0",

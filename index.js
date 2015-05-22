@@ -24,7 +24,7 @@ var ENOENT = new Error('ENOENT')
 ENOENT.code = 'ENOENT'
 
 module.exports = function (home) {
-  var cauf = {}
+  var hyperfs = {}
   var db = level(path.join(home, 'db'))
 
   var metadata = subleveldown(db, 'metadata', {valueEncoding: 'json'})
@@ -48,24 +48,31 @@ module.exports = function (home) {
     return lexint.pack(depth, 'hex') + '!' + name
   }
 
-  cauf.put = function (id, name, data, cb) {
+  hyperfs.show = function (key, cb) {
+    log.get(key, function (err, node) {
+      if (err) return cb(err)
+      cb(null, JSON.parse(node.value.toString()))
+    })
+  }
+
+  hyperfs.put = function (id, name, data, cb) {
     var key = id + '!' + toIndexKey(name)
     if (!data.ctime) data.ctime = Date.now()
     if (!data.mtime) data.mtime = Date.now()
     metadata.put(key, data, cb)
   }
 
-  cauf.del = function (id, name, cb) {
+  hyperfs.del = function (id, name, cb) {
     var key = id + '!' + toIndexKey(name)
     metadata.del(key, cb)
   }
 
-  cauf.get = function (id, name, cb) {
+  hyperfs.get = function (id, name, cb) {
     var key = id + '!' + toIndexKey(name)
     metadata.get(key, cb)
   }
 
-  cauf.unmount = function (mnt, cb) {
+  hyperfs.unmount = function (mnt, cb) {
     fuse.unmount(mnt, cb)
   }
 
@@ -115,18 +122,18 @@ module.exports = function (home) {
     return data.key.slice(data.key.indexOf('!') + 1)
   }
 
-  cauf.hasBlob = function (hash, cb) {
+  hyperfs.hasBlob = function (hash, cb) {
     fs.stat(path.join(home, readablePath(hash)), function (err) {
       cb(null, !err)
     })
   }
 
-  cauf.createBlobReadStream = function (key) {
+  hyperfs.createBlobReadStream = function (key) {
     return fs.createReadStream(path.join(home, readablePath(key)))
   }
 
-  cauf.createBlobWriteStream = function (cb) {
-    var filename = path.join(os.tmpdir(), 'cauf-tmp-' + crypto.randomBytes(32).toString('hex'))
+  hyperfs.createBlobWriteStream = function (cb) {
+    var filename = path.join(os.tmpdir(), 'hyperfs-tmp-' + crypto.randomBytes(32).toString('hex'))
     var hash = crypto.createHash('sha256')
 
     var write = function (data, enc, cb) {
@@ -153,7 +160,7 @@ module.exports = function (home) {
     return hasher
   }
 
-  cauf.readSnapshot = function (key, cb) {
+  hyperfs.readSnapshot = function (key, cb) {
     snapshots.get(key, function (err, space) {
       if (err) return cb(err)
 
@@ -167,7 +174,7 @@ module.exports = function (home) {
     })
   }
 
-  cauf.snapshot = function (id, opts) { // don't mutate the layer while running this for now
+  hyperfs.snapshot = function (id, opts) { // don't mutate the layer while running this for now
     var monitor = new events.EventEmitter()
     var message = opts.message
 
@@ -182,9 +189,9 @@ module.exports = function (home) {
         if (err) return monitor.emit('error', err)
 
         var write = function (data, enc, cb) {
-          cauf.put(key, data.name, {special: data.special, deleted: data.deleted, mode: data.mode, uid: data.uid, gid: data.gid, ino: data.ino, rdev: data.rdev}, function (err) {
+          hyperfs.put(key, data.name, {special: data.special, deleted: data.deleted, mode: data.mode, uid: data.uid, gid: data.gid, ino: data.ino, rdev: data.rdev}, function (err) {
             if (err) return cb(err)
-            cauf.del(id, data.name, function () {
+            hyperfs.del(id, data.name, function () {
               getInode(id, data.ino || 0, function (err, inode) {
                 if (err && err.notFound) return cb() // we already processed this one
                 if (err) return cb(err)
@@ -215,7 +222,7 @@ module.exports = function (home) {
           })
         }
 
-        cauf.readSnapshot(key, function (err, rs) {
+        hyperfs.readSnapshot(key, function (err, rs) {
           if (err) return monitor.emit('error', err)
 
           pump(rs, through.obj(write), function () {
@@ -317,7 +324,7 @@ module.exports = function (home) {
     return monitor
   }
 
-  cauf.nodes = function () {
+  hyperfs.nodes = function () {
     var write = function (node, enc, cb) {
       node.value = JSON.parse(node.value)
       cb(null, node)
@@ -326,7 +333,7 @@ module.exports = function (home) {
     return pump(log.createReadStream(), through.obj(write))
   }
 
-  cauf.ancestors = function (key, cb) {
+  hyperfs.ancestors = function (key, cb) {
     var list = []
 
     var loop = function (key) {
@@ -341,15 +348,15 @@ module.exports = function (home) {
     loop(key)
   }
 
-  cauf.list = function () {
+  hyperfs.list = function () {
     return volumes.createKeyStream()
   }
 
-  cauf.info = function (key, cb) {
+  hyperfs.info = function (key, cb) {
     return volumes.get(key, cb)
   }
 
-  cauf.remove = function (key, cb) {
+  hyperfs.remove = function (key, cb) {
     if (!cb) cb = noop
 
     var write = function (data, enc, cb) {
@@ -362,8 +369,8 @@ module.exports = function (home) {
     })
   }
 
-  cauf.create = function (key, opts, cb) {
-    if (typeof opts === 'function') return cauf.create(key, null, opts)
+  hyperfs.create = function (key, opts, cb) {
+    if (typeof opts === 'function') return hyperfs.create(key, null, opts)
     if (!cb) cb = noop
     if (!opts) opts = {}
     volumes.get(key, function (_, v) {
@@ -372,7 +379,7 @@ module.exports = function (home) {
     })
   }
 
-  cauf.replicate = function (opts) {
+  hyperfs.replicate = function (opts) {
     if (!opts) opts = {}
 
     var drains = []
@@ -388,7 +395,7 @@ module.exports = function (home) {
         }
 
         plex.emit('send-snapshot', parts[1])
-        cauf.readSnapshot(parts[1], function (err, rs) {
+        hyperfs.readSnapshot(parts[1], function (err, rs) {
           if (err) return stream.destroy(err)
           pump(rs, through.obj(encode), stream)
         })
@@ -399,7 +406,7 @@ module.exports = function (home) {
         plex.emit('send-data', parts[1])
         blobs++
         graph.cork()
-        pump(cauf.createBlobReadStream(parts[1]), stream, function () {
+        pump(hyperfs.createBlobReadStream(parts[1]), stream, function () {
           blobs--
           if (!blobs) {
             while (drains.length) drains.shift()()
@@ -428,7 +435,7 @@ module.exports = function (home) {
 
         var done = function () {
           var meta = {special: val.special, deleted: val.deleted, mode: val.mode, uid: val.uid, gid: val.gid, ino: val.ino, rdev: val.rdev}
-          cauf.put(value.snapshot, val.name, meta, function (err) {
+          hyperfs.put(value.snapshot, val.name, meta, function (err) {
             if (err) return cb(err)
             if (!val.ino) return cb(null, {raw: raw, value: val})
             getInode(value.snapshot, val.ino, function (_, inode) {
@@ -444,11 +451,11 @@ module.exports = function (home) {
 
         if (!val.data) return done()
 
-        cauf.hasBlob(val.data, function (err, exists) {
+        hyperfs.hasBlob(val.data, function (err, exists) {
           if (err) return cb(err)
           if (exists) return done()
           plex.emit('receive-data', val.data)
-          pump(plex.createStream('d/' + val.data, {chunked: true}), cauf.createBlobWriteStream(function (err, key) {
+          pump(plex.createStream('d/' + val.data, {chunked: true}), hyperfs.createBlobWriteStream(function (err, key) {
             if (err) return cb(err)
             done()
           }))
@@ -486,7 +493,7 @@ module.exports = function (home) {
     return plex
   }
 
-  cauf.mount = function (key, mnt, opts) {
+  hyperfs.mount = function (key, mnt, opts) {
     if (!opts) opts = {}
 
     var mount = new events.EventEmitter()
@@ -496,7 +503,7 @@ module.exports = function (home) {
     mount.node = null
     mount.mountpoint = mnt
     mount.inodes = 0
-    mount.unmount = cauf.unmount.bind(cauf, mnt)
+    mount.unmount = hyperfs.unmount.bind(hyperfs, mnt)
 
     var wrap = function (cb) {
       return function (err) {
@@ -508,7 +515,7 @@ module.exports = function (home) {
     var get = function (name, cb) {
       var loop = function (i) {
         if (i < 0) return cb(ENOENT)
-        cauf.get(mount.layers[i], name, function (err, file) {
+        hyperfs.get(mount.layers[i], name, function (err, file) {
           if (err) return loop(i - 1)
           if (file.deleted) return cb(ENOENT)
           cb(null, file, mount.layers[i])
@@ -537,10 +544,10 @@ module.exports = function (home) {
       }
 
       var loop = function (i) {
-        if (i === mount.layers.length - 1) return cauf.del(mount.id, name, oninode)
-        cauf.get(mount.layers[i], name, function (err, file) {
+        if (i === mount.layers.length - 1) return hyperfs.del(mount.id, name, oninode)
+        hyperfs.get(mount.layers[i], name, function (err, file) {
           if (err) return loop(i + 1)
-          cauf.put(mount.id, name, {deleted: true}, oninode)
+          hyperfs.put(mount.id, name, {deleted: true}, oninode)
         })
       }
 
@@ -557,7 +564,7 @@ module.exports = function (home) {
 
         var store = function (data) {
           if (data.refs.length === 1) {
-            cauf.put(mount.id, name, file, function (err) {
+            hyperfs.put(mount.id, name, file, function (err) {
               if (err) return cb(err)
               cb(null, file)
             })
@@ -571,7 +578,7 @@ module.exports = function (home) {
             var r = data.refs[i++]
             get(r, function (err, file) {
               if (err) return cb(err)
-              cauf.put(mount.id, r, file, loop)
+              hyperfs.put(mount.id, r, file, loop)
             })
           }
 
@@ -617,6 +624,7 @@ module.exports = function (home) {
 
       ops.force = true
       ops.options = ['suid', 'dev']
+      ops.displayFolder = true
 
       ops.statfs = function (pathname, cb) { // TODO: return actual corrent data here instead
         cb(0, {
@@ -639,7 +647,7 @@ module.exports = function (home) {
 
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
-          cauf.put(mount.id, dest, file, function (err) {
+          hyperfs.put(mount.id, dest, file, function (err) {
             if (err) return cb(fuse.errno(err.code))
             getInode(mount.id, file.ino, function (err, data) {
               if (err) return cb(fuse.errno(err.code))
@@ -764,7 +772,7 @@ module.exports = function (home) {
             if (err) return cb(fuse.errno(err.code))
             mknod(path.join(home, filename), mode, dev, function (err) {
               if (err) return cb(fuse.errno(err.code))
-              cauf.put(mount.id, name, {special: true, rdev: dev, mode: mode, ino: inode}, wrap(cb))
+              hyperfs.put(mount.id, name, {special: true, rdev: dev, mode: mode, ino: inode}, wrap(cb))
             })
           })
         })
@@ -811,7 +819,7 @@ module.exports = function (home) {
             if (err) return cb(fuse.errno(err.code))
             fs.open(path.join(home, filename), 'w+', mode, function (err, fd) {
               if (err) return cb(fuse.errno(err.code))
-              cauf.put(mount.id, name, {mode: mode, ino: inode}, function (err) {
+              hyperfs.put(mount.id, name, {mode: mode, ino: inode}, function (err) {
                 if (err) return cb(fuse.errno(err.code))
                 cb(0, fd)
               })
@@ -833,7 +841,7 @@ module.exports = function (home) {
         var inode = ++mount.inodes
         putInode(mount.id, inode, {refs: [name]}, function (err) {
           if (err) return cb(fuse.errno(err.code))
-          cauf.put(mount.id, name, {mode: mode | 040000, ino: inode}, wrap(cb))
+          hyperfs.put(mount.id, name, {mode: mode | 040000, ino: inode}, wrap(cb))
         })
       }
 
@@ -902,7 +910,7 @@ module.exports = function (home) {
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           file.mode = mode
-          cauf.put(mount.id, name, file, wrap(cb))
+          hyperfs.put(mount.id, name, file, wrap(cb))
         })
       }
 
@@ -912,7 +920,7 @@ module.exports = function (home) {
           if (err) return cb(fuse.errno(err.code))
           if (uid > -1) file.uid = uid
           if (gid > -1) file.gid = gid
-          cauf.put(mount.id, name, file, wrap(cb))
+          hyperfs.put(mount.id, name, file, wrap(cb))
         })
       }
 
@@ -922,7 +930,7 @@ module.exports = function (home) {
           if (err) return cb(fuse.errno(err.code))
           file.ctime = ctime.getTime()
           file.mtime = mtime.getTime()
-          cauf.put(mount.id, name, file, wrap(cb))
+          hyperfs.put(mount.id, name, file, wrap(cb))
         })
       }
 
@@ -975,11 +983,11 @@ module.exports = function (home) {
       mount.mountpoint = mnt
       mount.node = v.node
       if (!v.node) return onlayers(null, [])
-      cauf.ancestors(v.node, onlayers)
+      hyperfs.ancestors(v.node, onlayers)
     })
 
     return mount
   }
 
-  return cauf
+  return hyperfs
 }

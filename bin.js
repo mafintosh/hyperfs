@@ -2,9 +2,10 @@
 
 var minimist = require('minimist')
 var mkdirp = require('mkdirp')
-var transports = require('transport-stream')({command: 'cauf replicate -'})
-var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q', debug: 'D'}})
-var s = argv.store || 'cauf'
+var transports = require('transport-stream')({command: 'hyperfs replicate -'})
+var execspawn = require('execspawn')
+var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q', debug: 'D', store: 's', node: 'n'}})
+var s = argv.store || 'hyperfs'
 
 mkdirp.sync(s)
 
@@ -14,6 +15,19 @@ var cmd = argv._[0]
 
 if (cmd === 'list' || cmd === 'ls') {
   cauf.list().on('data', console.log)
+  return
+}
+
+if (cmd === 'show') {
+  cauf.show(argv._[1], function (err, val) {
+    if (err) throw err
+    cauf.readSnapshot(val.snapshot, function (err, rs) {
+      if (err) throw err
+      rs.on('data', function (data) {
+        console.log(JSON.stringify(data))
+      })
+    })
+  })
   return
 }
 
@@ -69,8 +83,32 @@ if (cmd === 'replicate') {
   return
 }
 
+if (cmd === 'exec') {
+  var mnt = cauf.mount(argv._[1], argv._[2] || 'mnt', argv)
+
+  mnt.on('ready', function () {
+    var proc = execspawn(argv._[3], {
+      cwd: argv._[2] || 'mnt'
+    })
+
+    proc.stdout.pipe(process.stdout)
+    proc.stderr.pipe(process.stderr)
+
+    proc.on('exit', function () {
+      cauf.unmount(argv._[2] || 'mnt')
+    })
+  })
+
+  process.on('SIGINT', function () {
+    cauf.unmount(argv._[2] || 'mnt', function () {
+      process.exit()
+    })
+  })
+  return
+}
+
 if (cmd === 'mount') {
-  var mnt = cauf.mount(argv._[1], argv._[2], argv)
+  var mnt = cauf.mount(argv._[1], argv._[2] || 'mnt', argv)
   mnt.on('ready', function () {
     console.log(mnt.id, 'mounted')
     ;[].concat(mnt.nodes).reverse().forEach(function (l) {
@@ -78,7 +116,7 @@ if (cmd === 'mount') {
     })
   })
   process.on('SIGINT', function () {
-    cauf.unmount('mnt', function () {
+    cauf.unmount(argv._[2] || 'mnt', function () {
       process.exit()
     })
   })
