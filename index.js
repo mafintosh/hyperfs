@@ -920,7 +920,7 @@ module.exports = function (home) {
       }
 
       ops.chown = function (name, uid, gid, cb) {
-        if (opts.debug) console.log('chown:', name, mode)
+        if (opts.debug) console.log('chown:', name, uid, gid)
         cow(name, function (err, file) {
           if (err) return cb(fuse.errno(err.code))
           if (uid > -1) file.uid = uid
