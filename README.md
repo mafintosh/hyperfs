@@ -64,7 +64,8 @@ npm i mini-container -g # a minimal container runtime
 apt-get install debootstrap # for installing base distros into a folder
 # create an ubuntu volume
 hyperfs create ubuntu
-# execute debootstrap on this volume (installs base ubuntu trusty)
+# execute debootstrap on this volume. installs base ubuntu trusty
+# note: this will take a while (> 20 mins)
 hyperfs exec ubuntu 'debootstrap --variant=buildd --arch amd64 trusty . http://archive.ubuntu.com/ubuntu/'
 # snapshot ubuntu so we can use it later for other containers
 hyperfs snapshot ubuntu -m 'ubuntu trusty core installation'
