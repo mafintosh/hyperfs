@@ -61,6 +61,7 @@ You can use hyperfs to build your own docker-like container platform
 
 ``` sh
 npm i mini-container -g # a minimal container runtime
+apt-get install debootstrap # for installing base distros into a folder
 # create an ubuntu volume
 hyperfs create ubuntu
 # execute debootstrap on this volume (installs base ubuntu trusty)
