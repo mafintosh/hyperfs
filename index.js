@@ -30,7 +30,7 @@ module.exports = function (home) {
 
   var fuseMounts = {}
   var fuseMount = function (mnt, opts, cb) {
-    var c = fuseMounts[mnt] = proc.spawn('hyperfused', [mnt, '-', '-osuid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
+    var c = fuseMounts[mnt] = proc.spawn('linux', ['run', 'sudo', 'hyperfused', mnt, '-', '-osuid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
     c.stderr.pipe(process.stderr)
     var stream = hyperfuse(opts)
     c.stdout.pipe(stream).pipe(c.stdin)
@@ -711,8 +711,8 @@ module.exports = function (home) {
               rdev: file.rdev || stat.rdev,
               nlink: nlink,
               ino: file.ino || stat.ino,
-              uid: file.uid || process.getuid(),
-              gid: file.gid || process.getgid(),
+              uid: file.uid || 0,
+              gid: file.gid || 0,
               mtime: new Date(file.mtime || 0),
               ctime: new Date(file.ctime || 0),
               atime: new Date(file.mtime || 0)
