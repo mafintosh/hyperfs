@@ -30,7 +30,7 @@ module.exports = function (home) {
 
   var fuseMounts = {}
   var fuseMount = function (mnt, opts, cb) {
-    var c = mounts[mnt] = proc.spawn('hyperfused', [mnt, '-', '-osuid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
+    var c = fuseMounts[mnt] = proc.spawn('hyperfused', [mnt, '-', '-osuid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
     c.stderr.pipe(process.stderr)
     var stream = hyperfuse(opts)
     c.stdout.pipe(stream).pipe(c.stdin)
@@ -41,11 +41,11 @@ module.exports = function (home) {
 
   var fuseUnmount = function (mnt, cb) {
     if (!cb) cb = noop
-    if (!mounts[mnt]) return cb()
-    mounts[mnt].on('exit', function () {
+    if (!fuseMounts[mnt]) return cb()
+    fuseMounts[mnt].on('exit', function () {
       cb()
     })
-    mounts[mnt].kill()
+    fuseMounts[mnt].kill()
   }
 
 
