@@ -985,7 +985,7 @@ module.exports = function (home) {
       var done = function () {
         fs.stat('/', function (err, root) {
           if (err) return mount.emit('error', err)
-          ready(st)
+          ready(root)
         })
       }
 
