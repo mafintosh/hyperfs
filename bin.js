@@ -135,8 +135,7 @@ if (cmd === 'exec') {
   if (!argv._[1]) throw new Error('volume required')
   var folder = argv.mnt || path.join(s, 'mnt', argv._[1])
 
-  mkdirp(folder, function (err) {
-    if (err) throw err
+  mkdirp(folder, function () {
     var mnt = hyperfs.mount(argv._[1], folder, argv)
 
     mnt.on('ready', function () {

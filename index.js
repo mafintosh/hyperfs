@@ -5,6 +5,7 @@ var mkdirp = require('mkdirp')
 var pump = require('pump')
 var fs = require('fs')
 var fuse = require('fuse-bindings')
+var hyperfuse = require('hyperfuse')
 var lexint = require('lexicographic-integer')
 var union = require('sorted-union-stream')
 var events = require('events')
@@ -17,6 +18,7 @@ var from = require('from2')
 var hyperlog = require('hyperlog')
 var multiplex = require('multiplex')
 var os = require('os')
+var proc = require('child_process')
 
 var noop = function () {}
 var ENOENT = new Error('ENOENT')
@@ -25,6 +27,27 @@ ENOENT.code = 'ENOENT'
 module.exports = function (home) {
   var hyperfs = {}
   var db = level(path.join(home, 'db'))
+
+  var fuseMounts = {}
+  var fuseMount = function (mnt, opts, cb) {
+    var c = mounts[mnt] = proc.spawn('hyperfused', [mnt, '-', '-osuid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
+    c.stderr.pipe(process.stderr)
+    var stream = hyperfuse(opts)
+    c.stdout.pipe(stream).pipe(c.stdin)
+    stream.on('mount', function () {
+      if (cb) cb()
+    })
+  }
+
+  var fuseUnmount = function (mnt, cb) {
+    if (!cb) cb = noop
+    if (!mounts[mnt]) return cb()
+    mounts[mnt].on('exit', function () {
+      cb()
+    })
+    mounts[mnt].kill()
+  }
+
 
   var metadata = subleveldown(db, 'metadata', {valueEncoding: 'json'})
   var inodes = subleveldown(db, 'inodes', {valueEncoding: 'json'})
@@ -72,7 +95,7 @@ module.exports = function (home) {
   }
 
   hyperfs.unmount = function (mnt, cb) {
-    fuse.unmount(mnt, cb)
+    fuseUnmount(mnt, cb)
   }
 
   var dirStream = function (layer, key) {
@@ -939,7 +962,7 @@ module.exports = function (home) {
         })
       }
 
-      fuse.mount(mnt, ops, function (err) {
+      fuseMount(mnt, ops, function (err) {
         if (err) return mount.emit('error', err)
         mount.emit('ready')
       })
@@ -960,12 +983,9 @@ module.exports = function (home) {
       mount.nodes = layers.map(toNode)
 
       var done = function () {
-        mkdirp(mnt, function (err) {
+        fs.stat('/', function (err, root) {
           if (err) return mount.emit('error', err)
-          fs.stat(mnt, function (err, st) {
-            if (err) return mount.emit('error', err)
-            ready(st)
-          })
+          ready(st)
         })
       }
 
