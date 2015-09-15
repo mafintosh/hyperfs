@@ -6,6 +6,7 @@ var mkdirp = require('mkdirp')
 var path = require('path')
 var transports = require('transport-stream')({command: 'hyperfs replicate -'})
 var execspawn = require('execspawn')
+var proc = require('child_process')
 var pretty = require('pretty-bytes')
 var log = require('single-line-log').stderr
 var argv = minimist(process.argv.slice(2), {alias: {message: 'm', quiet: 'q', debug: 'D', store: 's', node: 'n'}})
@@ -133,18 +134,16 @@ if (cmd === 'replicate') {
 
 if (cmd === 'exec') {
   if (!argv._[1]) throw new Error('volume required')
-  var folder = argv.mnt || path.join(s, 'mnt', argv._[1])
+  var folder = argv._[1]
 
   mkdirp(folder, function () {
     var mnt = hyperfs.mount(argv._[1], folder, argv)
-
     mnt.on('ready', function () {
-      var proc = execspawn(argv._[2], {
-        cwd: folder,
+      var child = proc.spawn('linux', ['--tty', 'run', 'sudo', 'chroot', folder, argv._[2]], {
         stdio: 'inherit'
       })
 
-      proc.on('exit', function (code) {
+      child.on('exit', function (code) {
         hyperfs.unmount(folder, function () {
           process.exit(code)
         })
