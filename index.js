@@ -1,10 +1,10 @@
+var errors = require('./errno')
 var path = require('path')
 var level = require('level')
 var crypto = require('crypto')
 var mkdirp = require('mkdirp')
 var pump = require('pump')
 var fs = require('fs')
-var fuse = require('fuse-bindings')
 var hyperfuse = require('hyperfuse')
 var lexint = require('lexicographic-integer')
 var union = require('sorted-union-stream')
@@ -535,7 +535,7 @@ module.exports = function (home) {
 
     var wrap = function (cb) {
       return function (err) {
-        if (err) return cb(fuse.errno(err.code))
+        if (err) return cb(errors.errno(err.code))
         cb(0)
       }
     }
@@ -674,11 +674,11 @@ module.exports = function (home) {
         if (opts.debug) console.log('link:', name, dest)
 
         cow(name, function (err, file) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           hyperfs.put(mount.id, dest, file, function (err) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             getInode(mount.id, file.ino, function (err, data) {
-              if (err) return cb(fuse.errno(err.code))
+              if (err) return cb(errors.errno(err.code))
               data.refs.push(dest)
               putInode(mount.id, file.ino, data, wrap(cb))
             })
@@ -690,7 +690,7 @@ module.exports = function (home) {
         if (name === '/') return cb(0, root)
 
         var onfile = function (err, file, layer) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
 
           if (file.special && layer !== mount.id) {
             cow(name, function (err, file) {
@@ -701,7 +701,7 @@ module.exports = function (home) {
 
           var nlink = 1
           var onstat = function (err, stat) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             cb(0, {
               mode: file.mode,
               size: file.size || stat.size,
@@ -723,7 +723,7 @@ module.exports = function (home) {
           getInode(layer, file.ino, function (err, inode) {
             if (err && fd > -1) return fs.fstat(fd, onstat)
             if (err) throw new Error('NO INODE FOR ' + name)
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
 
             nlink = inode.refs.length
             if (fd < 0) fs.lstat(path.join(home, inode.data), onstat)
@@ -764,9 +764,9 @@ module.exports = function (home) {
       ops.truncate = function (name, size, cb) {
         if (opts.debug) console.log('truncate:', name, size)
         cow(name, function (err, file) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           getInode(mount.id, file.ino, function (err, data) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             fs.truncate(path.join(home, data.data), size, wrap(cb))
           })
         })
@@ -795,11 +795,11 @@ module.exports = function (home) {
         var filename = writeablePath()
 
         putInode(mount.id, inode, {data: filename, refs: [name]}, function (err) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           mkdirp(path.join(home, filename, '..'), function (err) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             mknod(path.join(home, filename), mode, dev, function (err) {
-              if (err) return cb(fuse.errno(err.code))
+              if (err) return cb(errors.errno(err.code))
               hyperfs.put(mount.id, name, {special: true, rdev: dev, mode: mode, ino: inode}, wrap(cb))
             })
           })
@@ -809,9 +809,9 @@ module.exports = function (home) {
       ops.open = function (name, flags, cb) {
         var open = function (layer, ino) {
           getInode(layer, ino, function (err, data) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             fs.open(path.join(home, data.data), flags, function (err, fd) {
-              if (err) return cb(fuse.errno(err.code))
+              if (err) return cb(errors.errno(err.code))
               cb(0, fd)
             })
           })
@@ -819,7 +819,7 @@ module.exports = function (home) {
 
         var readonly = function () {
           get(name, function (err, file, layer) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             if (file.special) return writeMaybe() // special file - always cow
             open(layer, file.ino)
           })
@@ -827,7 +827,7 @@ module.exports = function (home) {
 
         var writeMaybe = function () {
           cow(name, function (err, file) {
-            if (err) return cb(fuse.errno(err))
+            if (err) return cb(errors.errno(err))
             open(mount.id, file.ino)
           })
         }
@@ -842,13 +842,13 @@ module.exports = function (home) {
         var filename = writeablePath()
 
         putInode(mount.id, inode, {data: filename, refs: [name]}, function (err) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           mkdirp(path.join(home, filename, '..'), function (err) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             fs.open(path.join(home, filename), 'w+', mode, function (err, fd) {
-              if (err) return cb(fuse.errno(err.code))
+              if (err) return cb(errors.errno(err.code))
               hyperfs.put(mount.id, name, {mode: mode, ino: inode}, function (err) {
-                if (err) return cb(fuse.errno(err.code))
+                if (err) return cb(errors.errno(err.code))
                 cb(0, fd)
               })
             })
@@ -859,7 +859,7 @@ module.exports = function (home) {
       ops.unlink = function (name, cb) {
         if (opts.debug) console.log('unlink:', name)
         cow(name, function (err, file) { // TODO: don't copy file if refs === 1 and deleting
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           del(name, file.ino, wrap(cb))
         })
       }
@@ -868,7 +868,7 @@ module.exports = function (home) {
         if (opts.debug) console.log('mkdir:', name, mode)
         var inode = ++mount.inodes
         putInode(mount.id, inode, {refs: [name]}, function (err) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           hyperfs.put(mount.id, name, {mode: mode | 040000, ino: inode}, wrap(cb))
         })
       }
@@ -876,21 +876,21 @@ module.exports = function (home) {
       ops.rmdir = function (name, cb) {
         if (opts.debug) console.log('rmdir:', name)
         cow(name, function (err, file) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           del(name, file.ino, wrap(cb))
         })
       }
 
       ops.write = function (name, fd, buf, len, offset, cb) {
         fs.write(fd, buf, 0, len, offset, function (err, bytes) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           cb(bytes)
         })
       }
 
       ops.read = function (name, fd, buf, len, offset, cb) {
         fs.read(fd, buf, 0, len, offset, function (err, bytes) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           cb(bytes)
         })
       }
@@ -908,7 +908,7 @@ module.exports = function (home) {
           var pos = 0
           var loop = function () {
             fs.write(fd, buf, 0, buf.length, pos, function (err, bytes) {
-              if (err) return cb(fuse.errno(err.code))
+              if (err) return cb(errors.errno(err.code))
               if (bytes === buf.length) return fs.close(fd, wrap(cb))
               pos += bytes
               buf = buf.slice(bytes)
@@ -922,11 +922,11 @@ module.exports = function (home) {
 
       ops.readlink = function (name, cb) {
         get(name, function (err, file, layer) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           getInode(layer, file.ino, function (err, data) {
-            if (err) return cb(fuse.errno(err.code))
+            if (err) return cb(errors.errno(err.code))
             fs.readFile(path.join(home, data.data), 'utf-8', function (err, res) {
-              if (err) return cb(fuse.errno(err.code))
+              if (err) return cb(errors.errno(err.code))
               cb(0, res)
             })
           })
@@ -936,7 +936,7 @@ module.exports = function (home) {
       ops.chmod = function (name, mode, cb) {
         if (opts.debug) console.log('chmod:', name, mode)
         cow(name, function (err, file) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           file.mode = mode
           hyperfs.put(mount.id, name, file, wrap(cb))
         })
@@ -945,7 +945,7 @@ module.exports = function (home) {
       ops.chown = function (name, uid, gid, cb) {
         if (opts.debug) console.log('chown:', name, uid, gid)
         cow(name, function (err, file) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           if (uid > -1) file.uid = uid
           if (gid > -1) file.gid = gid
           hyperfs.put(mount.id, name, file, wrap(cb))
@@ -955,7 +955,7 @@ module.exports = function (home) {
       ops.utimens = function (name, ctime, mtime, cb) {
         if (opts.time === false) return cb(0)
         cow(name, function (err, file) {
-          if (err) return cb(fuse.errno(err.code))
+          if (err) return cb(errors.errno(err.code))
           file.ctime = ctime.getTime()
           file.mtime = mtime.getTime()
           hyperfs.put(mount.id, name, file, wrap(cb))
