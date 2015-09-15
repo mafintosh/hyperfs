@@ -138,8 +138,9 @@ if (cmd === 'exec') {
 
   mkdirp(folder, function () {
     var mnt = hyperfs.mount(argv._[1], folder, argv)
+    var isTTY = process.stdin.isTTY
     mnt.on('ready', function () {
-      var child = proc.spawn('linux', ['--tty', 'run', 'sudo', 'chroot', folder, argv._[2]], {
+      var child = proc.spawn('linux', [].concat(isTTY ? ['--tty'] : [], ['run', 'sudo', 'chroot', folder, argv._[2]]), {
         stdio: 'inherit'
       })
 
