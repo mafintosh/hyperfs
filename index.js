@@ -30,9 +30,10 @@ module.exports = function (home) {
 
   var fuseMounts = {}
   var fuseMount = function (mnt, opts, cb) {
-    var c = fuseMounts[mnt] = proc.spawn('linux', ['run', 'sudo', 'hyperfused', mnt, '-', '-osuid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
-    c.stderr.pipe(process.stderr)
     var stream = hyperfuse(opts)
+    var c = fuseMounts[mnt] = proc.spawn('linux', ['run', 'sudo', 'hyperfused', mnt, '-', '-okernel_cache,negative_timeout=1000,attr_timeout=1000,entry_timeout=1000,noatime,suid,dev' + (/\*|(^,)hyperfs(,|$)/.test(process.env.DEBUG) ? ',debug' : '')])
+
+    c.stderr.pipe(process.stderr)
     c.stdout.pipe(stream).pipe(c.stdin)
     stream.on('mount', function () {
       if (cb) cb()
@@ -807,6 +808,7 @@ module.exports = function (home) {
       }
 
       ops.open = function (name, flags, cb) {
+        if (opts.debug) console.log('open', name)
         var open = function (layer, ino) {
           getInode(layer, ino, function (err, data) {
             if (err) return cb(errors.errno(err.code))
