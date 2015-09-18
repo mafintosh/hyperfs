@@ -349,7 +349,13 @@ module.exports = function (home) {
     if (!cb) cb = noop
 
     var write = function (data, enc, cb) {
-      metadata.del(data.key, cb)
+      var done = function (err) {
+        if (err) return cb(err)
+        metadata.del(data.key, cb)
+      }
+
+      if (!data.value.ino) return done()
+      delInode(key, data.value.ino, done)
     }
 
     pump(metadata.createReadStream({gt: key + '!', lt: key + '!\xff'}), through.obj(write), function (err) {
