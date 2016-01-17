@@ -32,12 +32,12 @@
   "devDependencies": {},
   "repository": {
     "type": "git",
-    "url": "https://github.com/mafintosh/content-addressable-union-fs.git"
+    "url": "https://github.com/mafintosh/hyperfs.git"
   },
   "author": "Mathias Buus (@mafintosh)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/mafintosh/content-addressable-union-fs/issues"
+    "url": "https://github.com/mafintosh/hyperfs/issues"
   },
-  "homepage": "https://github.com/mafintosh/content-addressable-union-fs"
+  "homepage": "https://github.com/mafintosh/hyperfs"
 }
